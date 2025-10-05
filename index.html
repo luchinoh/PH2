@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reading List</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;700&family=Poppins:wght=400;600&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom Styles for Fonts and Base Layout */
+        body {
+            background-color: #F8F7F4; /* Off-white background */
+            color: #2c3e50; /* Charcoal text */
+            font-family: 'Cormorant Garamond', serif;
+            min-height: 100vh;
+        }
+        .text-poppins {
+            font-family: 'Poppins', sans-serif;
+        }
+        .charcoal-text {
+            color: #2c3e50;
+        }
+        .drag-source {
+            opacity: 0.4;
+        }
+        /* Custom scrollbar for aesthetics */
+        .list-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .list-container::-webkit-scrollbar-thumb {
+            background-color: #bdc3c7;
+            border-radius: 4px;
+        }
+        .list-container::-webkit-scrollbar-track {
+            background: #F8F7F4;
+        }
+
+        /* DND Placeholder for visual feedback */
+        .drag-over-indicator {
+            border-top: 2px solid #3498db;
+            margin-top: -2px;
+            height: 0;
+        }
+
+        /* Style for drag feedback on the body (for PDFs) */
+        .file-drag-active {
+            box-shadow: 0 0 0 4px #3498db inset;
+        }
+    </style>
+    <script>
+        // Tailwind Configuration for custom colors and fonts
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'off-white': '#F8F7F4',
+                        'charcoal': '#2c3e50',
+                        'primary-blue': '#3498db', /* for accents/buttons */
+                    },
+                    fontFamily: {
+                        garamond: ['Cormorant Garamond', 'serif'],
+                        poppins: ['Poppins', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="min-h-screen p-4 sm:p-8">
+
+    <div id="app" class="max-w-5xl mx-auto bg-white rounded-xl shadow-2xl p-6 sm:p-10 border border-gray-100 w-full">
+        <h1 class="text-4xl sm:text-5xl font-garamond font-bold mb-8 text-center border-b pb-4">
+            Reading List
+        </h1>
+
+        <!-- Loading Indicator -->
+        <div id="loading" class="flex justify-center items-center py-10" style="display: none;">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-blue"></div>
+            <p class="ml-3 text-poppins text-charcoal">Connecting to Supabase...</p>
+        </div>
+
+        <!-- Reading List -->
+        <div id="reading-list" class="list-container max-h-[70vh] overflow-y-auto space-y-2 mb-6">
+            <!-- List items will be injected here -->
+        </div>
+
+        <!-- Hint for PDF drop -->
+        <p class="text-poppins text-xs text-center text-gray-400 mb-4">
+            (Drag PDF files anywhere onto the screen to quickly add them.)
+        </p>
+
+        <!-- Add Item Form (at the bottom) -->
+        <form id="add-item-form" class="flex space-x-2 pt-4 border-t border-gray-100">
+            <input type="text" id="new-item-text" placeholder="Author (Year): *Title*"
+                   class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue text-poppins charcoal-text">
+            <button type="submit"
+                    class="text-poppins font-semibold bg-primary-blue text-white rounded-lg px-4 py-3 shadow-md hover:bg-blue-600 transition duration-200 whitespace-nowrap">
+                Add Item
+            </button>
+        </form>
+
+        <!-- Message/Modal Area -->
+        <div id="message-area" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" style="display: none;">
+            <div id="message-content" class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center text-poppins">
+                <p class="charcoal-text font-semibold mb-4" id="modal-text">Error</p>
+                <button onclick="closeModal()" class="bg-primary-blue text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition">OK</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Supabase SDK Imports and Core Logic -->
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+        // --- SUPABASE CONFIGURATION (MUST BE EDITED) ---
+        // 🚨 IMPORTANT: Replace these placeholders with your actual Supabase project URL and Anon Key.
+        const SUPABASE_URL = "https://phpmhqfdbcbpidkohmdx.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBocG1ocWZkYmNicGlka29obWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTAzOTksImV4cCI6MjA3NDk4NjM5OX0.taS3tmL_OhJ2ubtCthp2HfLV6-1HvfjuU32aekK_kdQ";
+        // --- END CONFIGURATION ---
+        
+        const SUPABASE_TABLE = 'reading_list';
+
+        let supabase = null;
+        let userId = null; // Now managed by Supabase Auth
+        let readingList = []; // Local array to hold and sort the list items
+        let channel = null; // Supabase Realtime Channel
+
+        const readingListElement = document.getElementById('reading-list');
+        const loadingElement = document.getElementById('loading');
+        
+        // --- Initialization and User ID Management (Updated for Supabase Auth) ---
+
+        /** Initializes Supabase client and signs in anonymously. */
+        async function initializeSupabase() {
+            loadingElement.style.display = 'flex';
+            if (SUPABASE_URL === "YOUR_SUPABASE_URL_HERE" || SUPABASE_ANON_KEY === "YOUR_SUPABASE_ANON_KEY_HERE") {
+                 showModal("Please update the Supabase configuration inside the <script> block with your project keys.");
+                 loadingElement.style.display = 'none';
+                 return;
+            }
+
+            try {
+                supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                
+                // 1. Listen for Auth changes
+                supabase.auth.onAuthStateChange((event, session) => {
+                    if (session?.user) {
+                        userId = session.user.id; // Get the user ID from the Supabase Auth session
+                        setupRealtimeListener();
+                    } else {
+                        userId = null;
+                        readingList = [];
+                        renderReadingList(); // Clear list if user logs out or session ends
+                        loadingElement.style.display = 'none';
+                    }
+                });
+
+                // 2. Try to get current session or sign in anonymously if no session exists
+                const { data: { session } } = await supabase.auth.getSession();
+                
+                if (!session) {
+                    // Sign in anonymously to get a stable, authenticated user ID
+                    const { error } = await supabase.auth.signInAnonymously();
+                    if (error) {
+                        throw error;
+                    }
+                }
+                // If a session exists, the onAuthStateChange listener above handles fetching the list
+
+            } catch (error) {
+                console.error("Supabase initialization or anonymous sign-in failed:", error);
+                showModal("Failed to connect to Supabase Auth. Check console for details.");
+                loadingElement.style.display = 'none';
+            }
+        }
+
+
+        // --- Utility Functions ---
+
+        window.showModal = function(message) {
+            document.getElementById('modal-text').textContent = message;
+            document.getElementById('message-area').style.display = 'flex';
+        }
+
+        window.closeModal = function() {
+            document.getElementById('message-area').style.display = 'none';
+        }
+
+        function parsePdfFilename(filename) {
+            const baseName = filename.replace(/\.pdf$/i, '').trim();
+            const match = baseName.match(/^(.+)_(\d{4})_(.+)$/);
+
+            if (match) {
+                const author = match[1].replace(/_/g, ' ').trim();
+                const year = match[2];
+                let title = match[3].replace(/_/g, ' ').trim();
+                title = title.charAt(0).toUpperCase() + title.slice(1);
+                return `${author} (${year}): *${title}*`;
+            }
+            return baseName; 
+        }
+
+        // --- Real-time Data Listener and Rendering (Updated Query) ---
+
+        /** Fetches and sorts data from Supabase, then renders the list. */
+        async function fetchAndRenderList() {
+             if (!userId) {
+                loadingElement.style.display = 'none';
+                return; 
+             }
+             
+             // Now query based on the authenticated user's ID (auth.uid())
+            const { data, error } = await supabase
+                .from(SUPABASE_TABLE)
+                .select('*')
+                .eq('user_id', userId) // Filter by authenticated user's ID
+                .order('order', { ascending: true }); 
+
+            if (error) {
+                console.error("Supabase fetch failed:", error);
+                // Note: RLS usually causes a permission error here, which will be fixed by RLS setup
+                showModal("Could not load reading list. Check RLS policies or console.");
+                loadingElement.style.display = 'none';
+                return;
+            }
+
+            // Client-side sorting: 
+            // 1. By 'completed' status (false first, true last)
+            // 2. Then by 'order' (ascending)
+            // 3. Fallback to 'created_at'
+            readingList = data.sort((a, b) => {
+                if (a.completed !== b.completed) {
+                    return a.completed - b.completed;
+                }
+                if (a.order !== b.order) {
+                    return a.order - b.order;
+                }
+                return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            });
+
+            renderReadingList();
+            loadingElement.style.display = 'none';
+        }
+        
+        /** Sets up the Realtime listener for the reading list changes. */
+        function setupRealtimeListener() {
+            if (!userId) return; // Wait for Auth ID
+            
+            if (channel) {
+                supabase.removeChannel(channel);
+            }
+            
+            // Filter the Realtime channel using the authenticated user's ID
+            channel = supabase.channel('reading-list-changes')
+                .on('postgres_changes', 
+                    // NOTE: Realtime filter uses the user_id column from the database
+                    { event: '*', schema: 'public', table: SUPABASE_TABLE, filter: `user_id=eq.${userId}` },
+                    (payload) => {
+                        fetchAndRenderList();
+                    }
+                )
+                .subscribe();
+
+            fetchAndRenderList();
+        }
+
+
+        /** Renders the current state of the reading list array to the DOM. */
+        function renderReadingList() {
+            readingListElement.innerHTML = '';
+            if (readingList.length === 0) {
+                readingListElement.innerHTML = '<p class="text-center py-8 text-gray-500 text-poppins">Your reading list is empty. Add a book or drop a PDF!</p>';
+                return;
+            }
+
+            readingList.forEach((item, index) => {
+                const li = document.createElement('div');
+                li.id = `item-${item.id}`;
+                const completedStyle = item.completed ? 'bg-gray-100 hover:shadow-sm opacity-70 cursor-default' : 'bg-off-white hover:shadow-md cursor-grab';
+
+                li.className = `flex items-center p-3 rounded-xl shadow-sm border border-gray-200 transition-shadow duration-300 ${completedStyle}`;
+                
+                if (!item.completed) {
+                    li.setAttribute('draggable', 'true');
+                } else {
+                    li.setAttribute('draggable', 'false');
+                }
+
+                li.dataset.id = item.id;
+                li.dataset.order = item.order;
+                li.addEventListener('dragstart', handleDragStart);
+                li.addEventListener('dragenter', handleDragEnter);
+                li.addEventListener('dragleave', handleDragLeave);
+                li.addEventListener('dragend', handleDragEnd);
+
+                const textSpan = document.createElement('span');
+                textSpan.className = `flex-grow mr-4 text-lg font-garamond transition-all duration-300 ${item.completed ? 'line-through text-gray-500' : 'charcoal-text'}`;
+                
+                // Convert *Text* to <em>Text</em> for true italics rendering
+                const textWithItalics = item.text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                textSpan.innerHTML = textWithItalics; 
+
+                const handle = document.createElement('div');
+                handle.className = `text-gray-400 mr-3 text-2xl leading-none transition-colors duration-200 ${item.completed ? 'hidden' : 'cursor-grab hover:text-charcoal hidden sm:block'}`; 
+                handle.innerHTML = '&#8801;'; // Triple bar icon
+
+                // Checkmark Button (Toggle Completed)
+                const toggleButton = document.createElement('button');
+                toggleButton.className = `p-3 h-10 w-10 flex items-center justify-center rounded-full text-white transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-primary-blue mr-2 ${item.completed ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-400 hover:bg-green-500'}`;
+                toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>`;
+                toggleButton.onclick = () => toggleCompleted(item.id, !item.completed);
+
+                // Delete Button
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'p-3 h-10 w-10 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-gray-200 transition duration-200 focus:outline-none focus:ring-2 focus:ring-red-300';
+                deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3m-5 3h14" /></svg>`;
+                deleteButton.onclick = () => deleteItem(item.id);
+
+                // Append Order: Handle | Text | Toggle (Done) | Delete
+                li.append(handle, textSpan, toggleButton, deleteButton);
+                readingListElement.appendChild(li);
+            });
+        }
+
+        // --- CRUD Operations (Supabase) ---
+
+        /** Adds a new reading list item to Supabase. */
+        async function addItem(text) {
+            if (!supabase || !userId || !text.trim()) {
+                if (!userId) showModal("Authentication not ready. Please wait for sign-in.");
+                return;
+            }
+
+            // Determine the next order number among incomplete items
+            const incompleteItems = readingList.filter(item => !item.completed);
+            const newOrder = incompleteItems.length > 0 ? incompleteItems[incompleteItems.length - 1].order + 1 : 1;
+            
+            const { error } = await supabase
+                .from(SUPABASE_TABLE)
+                .insert({
+                    user_id: userId, // Use the authenticated user ID
+                    text: text.trim(),
+                    completed: false,
+                    order: newOrder,
+                });
+
+            if (error) {
+                console.error("Error adding document: ", error);
+                showModal("Failed to add item to Supabase. Check RLS policies.");
+            } else {
+                document.getElementById('new-item-text').value = '';
+                // Realtime listener handles re-render
+            }
+        }
+
+        /** Toggles the 'completed' status of an item. */
+        async function toggleCompleted(id, status) {
+            if (!supabase || !userId) return;
+
+            const { error } = await supabase
+                .from(SUPABASE_TABLE)
+                .update({ completed: status })
+                .eq('id', id);
+
+            if (error) {
+                console.error("Error updating document: ", error);
+                showModal("Failed to update item status.");
+            }
+            // Realtime listener handles re-render and re-sorting
+        }
+
+        /** Deletes a reading list item from Supabase. */
+        async function deleteItem(id) {
+            if (!supabase || !userId) return;
+
+            const { error } = await supabase
+                .from(SUPABASE_TABLE)
+                .delete()
+                .eq('id', id);
+            
+            if (error) {
+                console.error("Error deleting document: ", error);
+                showModal("Failed to delete item.");
+            }
+            // Realtime listener handles re-render
+        }
+
+        /** Updates the order numbers for the incomplete items after a drag-and-drop. 
+         * Uses a single batch update command. */
+        async function updateItemOrder(newOrderList) {
+            if (!supabase || !userId) return;
+
+            // 1. Filter only the INCOMPLETE items from the DOM-ordered list
+            const incompleteOrderList = newOrderList.filter(item => !item.completed);
+
+            // 2. Map them to the necessary update format
+            const updates = incompleteOrderList.map((item, index) => ({
+                id: item.id,
+                order: index + 1 // Assign new sequential order starting from 1
+            }));
+
+            // 3. Perform a single batch update on the database
+            const { error } = await supabase
+                .from(SUPABASE_TABLE)
+                .upsert(updates, { onConflict: 'id' });
+
+            if (error) {
+                console.error("Supabase batch update failed:", error);
+                showModal("Failed to save new list order.");
+            }
+        }
+
+        // --- Drag and Drop Logic (List Reordering) ---
+
+        let draggedItem = null;
+        let originalParent = null;
+
+        function handleDragStart(e) {
+            if (this.getAttribute('draggable') === 'false') {
+                e.preventDefault();
+                return;
+            }
+
+            draggedItem = this;
+            originalParent = readingListElement;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.outerHTML);
+            
+            setTimeout(() => {
+                this.classList.add('drag-source');
+            }, 0);
+        }
+
+        function handleDragEnter(e) {
+            e.preventDefault();
+            const target = this;
+
+            if (target === draggedItem || target.dataset.id === undefined || target.classList.contains('bg-gray-100')) {
+                return;
+            }
+
+            readingListElement.querySelectorAll('.drag-over-indicator').forEach(el => el.remove());
+
+            const indicator = document.createElement('div');
+            indicator.className = 'drag-over-indicator';
+            
+            const rect = target.getBoundingClientRect();
+            const offsetY = e.clientY - rect.top;
+
+            if (offsetY < rect.height / 2) {
+                readingListElement.insertBefore(indicator, target);
+            } else {
+                readingListElement.insertBefore(indicator, target.nextSibling);
+            }
+        }
+
+        function handleDragLeave() { /* Handled by dragEnter cleanup */ }
+        
+        function handleDragEnd() {
+            this.classList.remove('drag-source');
+            readingListElement.querySelectorAll('.drag-over-indicator').forEach(el => el.remove());
+
+            if (originalParent) {
+                const children = Array.from(originalParent.children).filter(el => el.dataset.id);
+                
+                const newOrderList = children.map(domEl => {
+                    const itemData = readingList.find(item => item.id.toString() === domEl.dataset.id);
+                    return itemData || { id: domEl.dataset.id, completed: false };
+                });
+                
+                updateItemOrder(newOrderList);
+            }
+            draggedItem = null;
+            originalParent = null;
+        }
+
+
+        // Global DND listeners for list reordering
+        readingListElement.addEventListener('dragover', (e) => {
+            e.preventDefault(); 
+            e.dataTransfer.dropEffect = 'move';
+        });
+
+        readingListElement.addEventListener('drop', (e) => {
+            e.preventDefault();
+
+            const indicator = readingListElement.querySelector('.drag-over-indicator');
+
+            if (draggedItem && indicator) {
+                indicator.insertAdjacentElement('beforebegin', draggedItem);
+            }
+        });
+
+
+        // --- PDF Drag and Drop Handling (Globally on Body) ---
+
+        let dragCounter = 0;
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        document.body.addEventListener('dragenter', (e) => {
+            dragCounter++;
+            if (e.dataTransfer.items && e.dataTransfer.items.length) {
+                 document.body.classList.add('file-drag-active');
+            }
+        }, false);
+        
+        document.body.addEventListener('dragleave', (e) => {
+            dragCounter--;
+            if (dragCounter === 0) {
+                document.body.classList.remove('file-drag-active');
+            }
+        }, false);
+
+        document.body.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            document.body.classList.remove('file-drag-active');
+            dragCounter = 0;
+
+            const files = e.dataTransfer.files;
+
+            if (files.length === 0) return;
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (file.type === 'application/pdf') {
+                    const parsedText = parsePdfFilename(file.name);
+                    addItem(parsedText);
+                } else {
+                    showModal(`File type not supported for ${file.name}. Only PDF files are accepted.`);
+                }
+            }
+        }
+
+
+        // --- Event Listeners and Initial Load ---
+
+        document.getElementById('add-item-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const input = document.getElementById('new-item-text');
+            addItem(input.value);
+        });
+
+        // Initialize on window load
+        window.onload = initializeSupabase;
+
+    </script>
+</body>
+</html>
