@@ -314,7 +314,8 @@
                 
                 const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id);
                 const tableName = draggedItem.dataset.table;
-                const updates = listItems.map((item, index) => ({ id: item.dataset.id, order: index + 1 }));
+                // After
+const updates = listItems.map((item, index) => ({ id: parseInt(item.dataset.id, 10), order: index + 1 }));
                 
                 if (updates.length > 0) {
                     const { error } = await supabase.from(tableName).upsert(updates);
