@@ -62,7 +62,7 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         const SUPABASE_URL = "https://phpmhqfdbcbpidkohmdx.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBocG1ocWZkYmNicGlka29obWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTAzOTksImV4cCI6MjA3NDk4NjM5OX0.taS3tmL_OhJ2ubtCthp2HfLV6-1HvfjuU32aekK_kdQ";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzIıNiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBocG1ocWZkYmNicGlka29obWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTAzOTksImV4cCI6MjA3NDk4NjM5OX0.taS3tmL_OhJ2ubtCthp2HfLV6-1HvfjuU32aekK_kdQ";
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos'; 
 
@@ -177,6 +177,7 @@
 
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragend', handleDragEnd);
+            li.addEventListener('dragleave', handleDragLeave); // This was causing the error
 
             const isReading = tableName === SUPABASE_TABLE_READING;
             const primaryColor = isReading ? 'primary-blue' : 'primary-green';
@@ -262,46 +263,49 @@
         function handleDragStart(e) { draggedItem = this; setTimeout(() => this.classList.add('drag-source'), 0); }
         function handleDragEnd() { draggedItem?.classList.remove('drag-source'); draggedItem = null; }
         
+        // --- THIS FUNCTION WAS MISSING ---
+        function handleDragLeave(e) {
+            // This function can be empty as other events handle the logic.
+        }
+
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return;
             const dropContainer = e.target.closest('.list-container, .subtask-container');
             if (!dropContainer) return;
 
-            const draggableItems = [...dropContainer.children].filter(c => c.hasAttribute('draggable'));
             let target = e.target.closest('[draggable="true"]');
-
-            if (target && target.parentNode === dropContainer) {
-                 const rect = target.getBoundingClientRect();
-                 if (e.clientY > rect.top + rect.height / 2) {
-                     target = target.nextSibling;
+            if (target && target.parentNode !== dropContainer) { target = null; } // Dropping on item in wrong list
+            
+            if (draggedItem.parentNode === dropContainer) { // Reordering within the same list
+                 if (target) {
+                     const rect = target.getBoundingClientRect();
+                     if (e.clientY > rect.top + rect.height / 2) dropContainer.insertBefore(draggedItem, target.nextSibling);
+                     else dropContainer.insertBefore(draggedItem, target);
+                 } else {
+                     dropContainer.appendChild(draggedItem);
                  }
-                 dropContainer.insertBefore(draggedItem, target);
-            } else if (!target) { // Dropped in an empty area of the container
-                dropContainer.appendChild(draggedItem);
             }
-
+            
             const newOrderedIds = [...dropContainer.children].filter(c => c.dataset.id).map(c => c.dataset.id);
             const updates = newOrderedIds.map((id, index) => ({ id: id, order: index + 1 }));
-
             if (updates.length > 0) {
-                const tableName = draggedItem.dataset.table;
-                const { error } = await supabase.from(tableName).upsert(updates);
+                const { error } = await supabase.from(draggedItem.dataset.table).upsert(updates);
                 if (error) { showModal("Failed to save new order."); } 
-                else { // Manually update local order for instant UI feedback before refetch
-                    updates.forEach(update => {
-                        const list = (tableName === SUPABASE_TABLE_READING) ? readingList : todoList;
-                        const item = list.find(i => i.id === update.id);
-                        if(item) item.order = update.order;
-                    });
-                }
+                else { updates.forEach(update => { const list = (draggedItem.dataset.table === SUPABASE_TABLE_READING) ? readingList : todoList; const item = list.find(i => i.id === update.id); if(item) item.order = update.order; }); }
             }
+            handleDragEnd(); // Call this to clean up regardless of drop success
         }
 
         ['dragover', 'dragenter'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
         
         // --- Auth & UI State ---
+        function updateAuthButton(isLoggedOut, email) {
+            const btn = document.getElementById('auth-toggle-btn');
+            btn.textContent = isLoggedOut ? 'Login' : `Logged in as ${email}`;
+            btn.onclick = isLoggedOut ? openAuthModal : handleLogout;
+        }
         function updateFormState(isLoggedIn) {
             ['new-reading-text', 'add-reading-form button', 'new-todo-text', 'add-todo-form button'].forEach(sel => document.querySelector(`#${sel}`).disabled = !isLoggedIn);
             document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Author (Year): *Title*" : "Please log in";
@@ -325,7 +329,6 @@
         
         document.getElementById('add-reading-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_READING, document.getElementById('new-reading-text').value); });
         document.getElementById('add-todo-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_TODOS, document.getElementById('new-todo-text').value); });
-
     </script>
 </body>
 </html>
