@@ -17,7 +17,7 @@
         .list-container::-webkit-scrollbar-thumb { background-color: #bdc3c7; border-radius: 4px; }
         .drag-over-indicator { border-top: 2px solid #3498db; margin-top: -2px; height: 0; }
         .file-drag-active { box-shadow: 0 0 0 4px #3498db inset; }
-        .subtask-container { padding-left: 1.5rem; }
+        .subtask-container { padding-left: 2.5rem; }
     </style>
     <script>
         tailwind.config = {
@@ -147,6 +147,7 @@
             const sortedTopLevel = [...todoMap.values()].sort((a,b) => a.completed - b.completed || a.order - b.order);
             
             sortedTopLevel.forEach(mainTodo => {
+                const wrapper = document.createElement('div'); // The wrapper is back!
                 const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false);
                 const subtaskContainer = document.createElement('div');
                 subtaskContainer.className = 'mt-1 space-y-1 subtask-container';
@@ -156,8 +157,9 @@
                     subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
                 });
                 
-                mainLi.appendChild(subtaskContainer);
-                todoListElement.appendChild(mainLi);
+                wrapper.appendChild(mainLi);
+                wrapper.appendChild(subtaskContainer);
+                todoListElement.appendChild(wrapper);
             });
         }
 
@@ -170,8 +172,13 @@
             li.setAttribute('draggable', !item.completed);
             
             let classes = `flex items-center rounded-xl border border-gray-200 transition-shadow duration-300`;
-            if (isSubtask) classes += ` p-2 bg-white flex-wrap`;
-            else classes += ` p-3 shadow-sm bg-off-white hover:shadow-md flex-wrap`;
+            if (isSubtask) {
+                classes += ` p-2 bg-white`;
+                li.dataset.isSubtask = 'true';
+            } else {
+                classes += ` p-3 shadow-sm bg-off-white hover:shadow-md`;
+                li.dataset.isSubtask = 'false';
+            }
             if (item.completed) classes += ` opacity-50`;
             li.className = classes;
 
@@ -215,7 +222,7 @@
         function showAddSubtaskInput(parentId) {
             const existingInput = document.getElementById('temp-subtask-input-container');
             if (existingInput) existingInput.remove();
-            const container = document.querySelector(`[data-id="${parentId}"] .subtask-container`);
+            const container = document.querySelector(`[data-parent-id="${parentId}"]`);
             if (!container) return;
             const inputContainer = document.createElement('div');
             inputContainer.id = 'temp-subtask-input-container';
@@ -274,6 +281,7 @@
             if (!draggedItem) return;
             const target = e.target.closest('[draggable="true"]');
             if (!target || target === draggedItem) return;
+
             const container = target.parentNode;
             if (draggedItem.parentNode !== container) return;
             
@@ -290,20 +298,18 @@
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
             
-            // Find the immediate container (.list-container or .subtask-container)
-            const dropContainer = e.target.closest('.subtask-container, .list-container');
+            const dropContainer = e.target.closest('.list-container, .subtask-container');
             if (!dropContainer) return handleDragEnd();
 
-            // Check if the dragged item belongs in this container
-            const isSubtaskDrop = dropContainer.classList.contains('subtask-container');
-            const draggedIsSubtask = !!(draggedItem.closest('.subtask-container'));
+            const isDraggedSubtask = draggedItem.dataset.isSubtask === 'true';
+            const isDropOnSubtaskContainer = dropContainer.classList.contains('subtask-container');
 
-            if (isSubtaskDrop !== draggedIsSubtask && dropContainer.id !== 'reading-list') {
-                 return handleDragEnd(); // Prevent dropping main tasks into sub-task lists and vice-versa
+            // Prevent invalid drops (main into sublist, sublist into main list)
+            if (isDraggedSubtask !== isDropOnSubtaskContainer && dropContainer.id !== 'reading-list') {
+                return handleDragEnd();
             }
-            
-            const indicator = dropContainer.querySelector('.drag-over-indicator');
 
+            const indicator = dropContainer.querySelector('.drag-over-indicator');
             if (indicator) {
                 dropContainer.insertBefore(draggedItem, indicator);
                 
@@ -317,7 +323,8 @@
                         showModal("Failed to save new order.");
                         fetchAndRenderList(tableName); // Revert on failure
                     } else {
-                        fetchAndRenderList(tableName); // Refresh list on success
+                        // On success, just refetch to ensure perfect state sync
+                        fetchAndRenderList(tableName);
                     }
                 }
             }
