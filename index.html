@@ -17,11 +17,7 @@
         .list-container::-webkit-scrollbar-thumb { background-color: #bdc3c7; border-radius: 4px; }
         .drag-over-indicator { border-top: 2px solid #3498db; margin-top: -2px; height: 0; }
         .file-drag-active { box-shadow: 0 0 0 4px #3498db inset; }
-        /* Final Sub-task indentation */
-        .subtask-container {
-            padding-left: 1.5rem; 
-            width: 100%;
-        }
+        .subtask-container { padding-left: 1.5rem; }
     </style>
     <script>
         tailwind.config = {
@@ -181,7 +177,7 @@
 
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragend', handleDragEnd);
-            li.addEventListener('dragenter', handleDragEnter); // Added this listener back
+            li.addEventListener('dragenter', handleDragEnter);
             li.addEventListener('dragleave', handleDragLeave);
 
             const isReading = tableName === SUPABASE_TABLE_READING;
@@ -294,10 +290,21 @@
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
             
-            const dropContainer = e.target.closest('.list-container, .subtask-container');
-            const indicator = dropContainer?.querySelector('.drag-over-indicator');
+            // Find the immediate container (.list-container or .subtask-container)
+            const dropContainer = e.target.closest('.subtask-container, .list-container');
+            if (!dropContainer) return handleDragEnd();
 
-            if (dropContainer && indicator && draggedItem.parentNode === dropContainer) {
+            // Check if the dragged item belongs in this container
+            const isSubtaskDrop = dropContainer.classList.contains('subtask-container');
+            const draggedIsSubtask = !!(draggedItem.closest('.subtask-container'));
+
+            if (isSubtaskDrop !== draggedIsSubtask && dropContainer.id !== 'reading-list') {
+                 return handleDragEnd(); // Prevent dropping main tasks into sub-task lists and vice-versa
+            }
+            
+            const indicator = dropContainer.querySelector('.drag-over-indicator');
+
+            if (indicator) {
                 dropContainer.insertBefore(draggedItem, indicator);
                 
                 const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id);
@@ -308,13 +315,9 @@
                     const { error } = await supabase.from(tableName).upsert(updates);
                     if (error) { 
                         showModal("Failed to save new order.");
-                        renderAllLists(); // Re-render to revert visual change on failure
+                        fetchAndRenderList(tableName); // Revert on failure
                     } else {
-                        updates.forEach(update => {
-                            const list = (tableName === SUPABASE_TABLE_READING) ? readingList : todoList;
-                            const item = list.find(i => i.id === update.id);
-                            if (item) item.order = update.order;
-                        });
+                        fetchAndRenderList(tableName); // Refresh list on success
                     }
                 }
             }
