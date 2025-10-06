@@ -62,7 +62,7 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         const SUPABASE_URL = "https://phpmhqfdbcbpidkohmdx.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzIıNiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBocG1ocWZkYmNicGlka29obWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTAzOTksImV4cCI6MjA3NDk4NjM5OX0.taS3tmL_OhJ2ubtCthp2HfLV6-1HvfjuU32aekK_kdQ";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBocG1ocWZkYmNicGlka29obWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTAzOTksImV4cCI6MjA3NDk4NjM5OX0.taS3tmL_OhJ2ubtCthp2HfLV6-1HvfjuU32aekK_kdQ";
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos'; 
 
@@ -177,7 +177,7 @@
 
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragend', handleDragEnd);
-            li.addEventListener('dragleave', handleDragLeave); // This was causing the error
+            li.addEventListener('dragleave', handleDragLeave);
 
             const isReading = tableName === SUPABASE_TABLE_READING;
             const primaryColor = isReading ? 'primary-blue' : 'primary-green';
@@ -265,7 +265,7 @@
         
         // --- THIS FUNCTION WAS MISSING ---
         function handleDragLeave(e) {
-            // This function can be empty as other events handle the logic.
+            // This can be empty, its presence prevents an error.
         }
 
         async function handleDrop(e) {
@@ -275,9 +275,9 @@
             if (!dropContainer) return;
 
             let target = e.target.closest('[draggable="true"]');
-            if (target && target.parentNode !== dropContainer) { target = null; } // Dropping on item in wrong list
+            if (target && target.parentNode !== dropContainer) { target = null; }
             
-            if (draggedItem.parentNode === dropContainer) { // Reordering within the same list
+            if (draggedItem.parentNode === dropContainer) {
                  if (target) {
                      const rect = target.getBoundingClientRect();
                      if (e.clientY > rect.top + rect.height / 2) dropContainer.insertBefore(draggedItem, target.nextSibling);
@@ -294,13 +294,12 @@
                 if (error) { showModal("Failed to save new order."); } 
                 else { updates.forEach(update => { const list = (draggedItem.dataset.table === SUPABASE_TABLE_READING) ? readingList : todoList; const item = list.find(i => i.id === update.id); if(item) item.order = update.order; }); }
             }
-            handleDragEnd(); // Call this to clean up regardless of drop success
+            handleDragEnd();
         }
 
         ['dragover', 'dragenter'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
         
-        // --- Auth & UI State ---
         function updateAuthButton(isLoggedOut, email) {
             const btn = document.getElementById('auth-toggle-btn');
             btn.textContent = isLoggedOut ? 'Login' : `Logged in as ${email}`;
@@ -323,7 +322,6 @@
         function showModal(message) { document.getElementById('modal-text').textContent = message; document.getElementById('message-area').style.display = 'flex'; }
         function closeModal() { document.getElementById('message-area').style.display = 'none'; }
 
-        // --- Global Event Setup ---
         window.onload = initializeSupabase;
         Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
         
