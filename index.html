@@ -198,25 +198,51 @@
                 supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 
                 supabase.auth.onAuthStateChange((event, session) => {
-                    if (session?.user) {
-                        const isAnonymous = session.user.app_metadata.provider === 'anon';
-                        userId = session.user.id; 
-                        updateAuthButton(isAnonymous, session.user.email);
-                        // Setup listeners for BOTH tables
-                        setupRealtimeListener(SUPABASE_TABLE_READING);
-                        setupRealtimeListener(SUPABASE_TABLE_TODOS);
-                    } else {
-                        userId = null;
-                        updateAuthButton(true, null);
-                        readingList = [];
-                        todoList = [];
-                        renderList(SUPABASE_TABLE_READING);
-                        renderList(SUPABASE_TABLE_TODOS);
-                        loadingElement.style.display = 'none';
-                    }
-                });
+    if (session?.user) {
+        // User is logged IN
+        const isAnonymous = session.user.app_metadata.provider === 'anon';
+        userId = session.user.id; 
+        updateAuthButton(isAnonymous, session.user.email);
+        updateFormState(true); // Enable the forms
+        setupRealtimeListener(SUPABASE_TABLE_READING);
+        setupRealtimeListener(SUPABASE_TABLE_TODOS);
+    } else {
+        // User is logged OUT
+        userId = null;
+        updateAuthButton(true, null);
+        updateFormState(false); // Disable the forms
+        readingList = [];
+        todoList = [];
+        renderList(SUPABASE_TABLE_READING);
+        renderList(SUPABASE_TABLE_TODOS);
+        loadingElement.style.display = 'none';
+    }
+});
 
-               
+function updateFormState(isLoggedIn) {
+    const readingInput = document.getElementById('new-reading-text');
+    const readingButton = document.querySelector('#add-reading-form button');
+    const todoInput = document.getElementById('new-todo-text');
+    const todoButton = document.querySelector('#add-todo-form button');
+
+    if (isLoggedIn) {
+        // Enable forms
+        readingInput.disabled = false;
+        readingButton.disabled = false;
+        todoInput.disabled = false;
+        todoButton.disabled = false;
+        readingInput.placeholder = "Author (Year): *Title* or drag a PDF";
+        todoInput.placeholder = "Buy milk, Study for class, etc.";
+    } else {
+        // Disable forms
+        readingInput.disabled = true;
+        readingButton.disabled = true;
+        todoInput.disabled = true;
+        todoButton.disabled = true;
+        readingInput.placeholder = "Please log in to add items";
+        todoInput.placeholder = "Please log in to add items";
+    }
+}               
 
             } catch (error) {
                 console.error("Supabase initialization or anonymous sign-in failed:", error);
