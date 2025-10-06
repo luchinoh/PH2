@@ -74,7 +74,16 @@
 </head>
 <body class="min-h-screen p-4 sm:p-8">
 
-    <!-- Removed outer border/shadow from this container to let the inner divs handle the 'box' look -->
+    <!-- Auth Toggle Button -->
+    <div class="max-w-7xl mx-auto w-full flex justify-end mb-4 px-4 sm:px-6">
+        <button id="auth-toggle-btn" 
+                class="text-poppins text-xs font-semibold py-2 px-4 rounded-full bg-charcoal text-white hover:bg-gray-700 transition duration-200"
+                onclick="openAuthModal()">
+            Login / Sign Up
+        </button>
+    </div>
+
+    <!-- Main Application Container -->
     <div id="app" class="max-w-7xl mx-auto w-full p-0">
         <h1 class="text-4xl sm:text-5xl font-garamond font-bold mb-8 text-center border-b pb-4 px-4 sm:px-6">
             Productivity Hub
@@ -97,11 +106,9 @@
                     <!-- Reading List items will be injected here -->
                 </div>
 
-                <!-- PDF Drag Hint -->
-                <p class="text-poppins text-xs text-center text-gray-400 mb-4 mt-auto">
-                    (Drag PDF files anywhere onto the screen to quickly add them.)
-                </p>
-
+                <!-- Empty space placeholder for vertical alignment -->
+                <div class="h-[1.75rem] mb-4 mt-auto"></div> 
+                
                 <!-- Reading List Add Item Form -->
                 <form id="add-reading-form" class="flex space-x-2 pt-4">
                     <input type="text" id="new-reading-text" placeholder="Author (Year): *Title* or drag a PDF"
@@ -122,7 +129,7 @@
                 </div>
 
                 <!-- Empty space placeholder for vertical alignment - Must match height of PDF hint -->
-                <div class="h-[3.35rem]"></div> 
+                <div class="h-[1.75rem] mb-4 mt-auto"></div> 
                 
                 <!-- To-Do List Add Item Form -->
                 <form id="add-todo-form" class="flex space-x-2 pt-4">
@@ -138,11 +145,34 @@
         </div>
         <!-- END TWO COLUMN LAYOUT -->
 
-        <!-- Message/Modal Area -->
+        <!-- Generic Message/Error Modal -->
         <div id="message-area" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" style="display: none;">
             <div id="message-content" class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center text-poppins">
                 <p class="charcoal-text font-semibold mb-4" id="modal-text">Error</p>
                 <button onclick="closeModal()" class="bg-primary-blue text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition">OK</button>
+            </div>
+        </div>
+
+        <!-- Login / Sign Up Modal -->
+        <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50" style="display: none;">
+            <div class="bg-white p-8 rounded-xl shadow-2xl max-w-sm w-full text-poppins">
+                <h3 class="text-2xl font-bold mb-6 text-center">Sync Across Devices</h3>
+                <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+                    <p id="auth-message" class="text-sm text-center text-red-500 mb-4"></p>
+                    <input type="email" id="auth-email" placeholder="Email" required
+                           class="w-full p-3 mb-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue">
+                    <input type="password" id="auth-password" placeholder="Password" required
+                           class="w-full p-3 mb-6 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue">
+                    
+                    <button type="submit" id="auth-action-btn"
+                            class="w-full bg-primary-blue text-white py-3 rounded-lg font-semibold shadow-md hover:bg-blue-600 transition duration-200">
+                        Sign Up / Log In
+                    </button>
+                    <button type="button" onclick="closeAuthModal()"
+                            class="w-full mt-3 text-sm text-gray-600 py-2 hover:text-charcoal transition">
+                        Cancel
+                    </button>
+                </form>
             </div>
         </div>
 
@@ -159,7 +189,7 @@
         // --- END CONFIGURATION ---
         
         const SUPABASE_TABLE_READING = 'reading_list';
-        const SUPABASE_TABLE_TODOS = 'todos'; // NEW TABLE NAME
+        const SUPABASE_TABLE_TODOS = 'todos'; 
 
         let supabase = null;
         let userId = null; 
@@ -171,6 +201,7 @@
         const readingListElement = document.getElementById('reading-list');
         const todoListElement = document.getElementById('todo-list');
         const loadingElement = document.getElementById('loading');
+        const authToggleBtn = document.getElementById('auth-toggle-btn');
         
         // --- Initialization and Auth ---
 
@@ -187,12 +218,15 @@
                 
                 supabase.auth.onAuthStateChange((event, session) => {
                     if (session?.user) {
+                        const isAnonymous = session.user.app_metadata.provider === 'anon';
                         userId = session.user.id; 
+                        updateAuthButton(isAnonymous, session.user.email);
                         // Setup listeners for BOTH tables
                         setupRealtimeListener(SUPABASE_TABLE_READING);
                         setupRealtimeListener(SUPABASE_TABLE_TODOS);
                     } else {
                         userId = null;
+                        updateAuthButton(true, null);
                         readingList = [];
                         todoList = [];
                         renderList(SUPABASE_TABLE_READING);
@@ -204,6 +238,7 @@
                 const { data: { session } = {} } = await supabase.auth.getSession();
                 
                 if (!session) {
+                    // Try to sign in anonymously first to get a user ID
                     const { error } = await supabase.auth.signInAnonymously();
                     if (error) throw error;
                 }
@@ -215,8 +250,75 @@
             }
         }
 
+        function updateAuthButton(isAnonymous, email) {
+            if (isAnonymous) {
+                authToggleBtn.textContent = 'Login / Sign Up';
+                authToggleBtn.onclick = openAuthModal;
+            } else if (email) {
+                authToggleBtn.textContent = `Logged in as ${email}`;
+                authToggleBtn.onclick = () => handleLogout();
+            } else {
+                 authToggleBtn.textContent = 'Logout';
+                 authToggleBtn.onclick = () => handleLogout();
+            }
+        }
+        
+        async function handleAuthSubmit(e) {
+            e.preventDefault();
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const authMsg = document.getElementById('auth-message');
+            authMsg.textContent = '';
+            
+            // Check if user exists first (simple check)
+            let { data: { users }, error: searchError } = await supabase.auth.admin.listUsers();
+            
+            if (searchError) {
+                // If search fails (usually due to lack of admin key, rely on standard flow)
+            }
+            
+            const userExists = users?.some(user => user.email === email);
 
-        // --- Utility Functions ---
+            if (userExists) {
+                 // Attempt Login
+                 const { error } = await supabase.auth.signInWithPassword({ email, password });
+                 if (error) {
+                    authMsg.textContent = error.message;
+                    return;
+                 }
+                 closeAuthModal();
+            } else {
+                 // Attempt Sign Up
+                 const { error } = await supabase.auth.signUp({ email, password });
+                 if (error) {
+                    authMsg.textContent = error.message;
+                    return;
+                 }
+                 authMsg.textContent = 'Sign up successful! Please check your email to confirm.';
+                 // Keep modal open briefly for confirmation message
+            }
+        }
+
+        async function handleLogout() {
+            const { error } = await supabase.auth.signOut();
+            if (error) {
+                 console.error("Logout error:", error);
+                 showModal("Error logging out.");
+            }
+        }
+
+        window.openAuthModal = function() {
+            document.getElementById('auth-modal').style.display = 'flex';
+            document.getElementById('auth-email').value = '';
+            document.getElementById('auth-password').value = '';
+            document.getElementById('auth-message').textContent = '';
+        }
+
+        window.closeAuthModal = function() {
+            document.getElementById('auth-modal').style.display = 'none';
+        }
+
+        // --- Utility Functions (Modal, Parsing, Resources) ---
 
         window.showModal = function(message) {
             document.getElementById('modal-text').textContent = message;
@@ -244,9 +346,10 @@
         // Determines the data array and DOM element based on table name
         function getListResources(tableName) {
             if (tableName === SUPABASE_TABLE_READING) {
-                return { list: readingList, element: readingListElement, emptyMessage: 'Your reading list is empty. Add a book or drag a PDF!', primaryColor: 'primary-blue' };
+                return { list: readingList, element: readingListElement, emptyMessage: 'Your reading list is empty. Add a book or drag a PDF!', primaryColor: 'primary-blue', itemFontSize: 'text-lg' };
             } else if (tableName === SUPABASE_TABLE_TODOS) {
-                return { list: todoList, element: todoListElement, emptyMessage: 'You have no tasks! Add a new to-do item.', primaryColor: 'primary-green' };
+                // Increased font size to text-xl for To-Do list items
+                return { list: todoList, element: todoListElement, emptyMessage: 'You have no tasks! Add a new to-do item.', primaryColor: 'primary-green', itemFontSize: 'text-xl' };
             }
             return null;
         }
@@ -305,7 +408,6 @@
                 .on('postgres_changes', 
                     { event: '*', schema: 'public', table: tableName, filter: `user_id=eq.${userId}` },
                     (payload) => {
-                        // NOTE: This fires on every CRUD event, fixing the delete issue potentially!
                         fetchAndRenderList(tableName);
                     }
                 )
@@ -323,7 +425,7 @@
             const resources = getListResources(tableName);
             if (!resources) return;
 
-            const { list, element, emptyMessage, primaryColor } = resources;
+            const { list, element, emptyMessage, primaryColor, itemFontSize } = resources;
             element.innerHTML = '';
             
             if (list.length === 0) {
@@ -334,8 +436,10 @@
             list.forEach((item) => {
                 const li = document.createElement('div');
                 li.id = `${tableName}-${item.id}`;
-                const completedStyle = item.completed ? 'bg-gray-100 hover:shadow-sm opacity-70 cursor-default' : 'bg-off-white hover:shadow-md cursor-grab';
+                // Removed bg-off-white and cursor-grab from completedStyle since drag handle is gone
+                const completedStyle = item.completed ? 'bg-gray-100 hover:shadow-sm opacity-70 cursor-default' : 'bg-off-white hover:shadow-md cursor-pointer';
 
+                // Changed the base class to use cursor-pointer for non-completed items (to enable drag from anywhere)
                 li.className = `flex items-center p-3 rounded-xl shadow-sm border border-gray-200 transition-shadow duration-300 ${completedStyle}`;
                 
                 if (!item.completed) {
@@ -355,7 +459,8 @@
                 li.addEventListener('dragend', handleDragEnd);
 
                 const textSpan = document.createElement('span');
-                textSpan.className = `flex-grow mr-4 text-lg font-garamond transition-all duration-300 ${item.completed ? 'line-through text-gray-500' : 'charcoal-text'}`;
+                // Applied dynamic font size
+                textSpan.className = `flex-grow mr-4 ${itemFontSize} font-garamond transition-all duration-300 ${item.completed ? 'line-through text-gray-500' : 'charcoal-text'}`;
                 
                 // Only Reading List uses italics formatting
                 let displayHtml = item.text;
@@ -364,24 +469,32 @@
                 }
                 textSpan.innerHTML = displayHtml; 
 
-                const handle = document.createElement('div');
-                handle.className = `text-gray-400 mr-3 text-2xl leading-none transition-colors duration-200 ${item.completed ? 'hidden' : 'cursor-grab hover:text-charcoal hidden sm:block'}`; 
-                handle.innerHTML = '&#8801;'; 
+                // --- Removed Drag Handle (&#8801;) ---
 
                 // Checkmark Button (Toggle Completed)
                 const toggleButton = document.createElement('button');
-                toggleButton.className = `p-3 h-10 w-10 flex items-center justify-center rounded-full text-white transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-${primaryColor} mr-2 ${item.completed ? 'bg-green-500 hover:bg-green-600' : `bg-gray-400 hover:bg-${primaryColor}`}`;
-                toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>`;
+                // Modified button class for minimal, unfilled circle look
+                const toggleButtonClasses = item.completed 
+                    ? `p-3 h-8 w-8 flex items-center justify-center rounded-full text-white transition-colors duration-300 focus:outline-none bg-primary-green hover:bg-green-600`
+                    : `p-3 h-8 w-8 flex items-center justify-center rounded-full text-gray-400 border-2 border-gray-300 hover:border-${primaryColor} hover:text-${primaryColor} transition-colors duration-300 focus:outline-none`;
+
+                toggleButton.className = `mr-2 ${toggleButtonClasses}`;
+
+                // Use checkmark icon only if completed, otherwise use blank span
+                toggleButton.innerHTML = item.completed 
+                    ? `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>`
+                    : `<span></span>`; 
+                
                 toggleButton.onclick = () => toggleCompleted(tableName, item.id, !item.completed);
 
-                // Delete Button
+                // Delete Button (Unchanged, remains subtle)
                 const deleteButton = document.createElement('button');
-                deleteButton.className = 'p-3 h-10 w-10 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-gray-200 transition duration-200 focus:outline-none focus:ring-2 focus:ring-red-300';
+                deleteButton.className = 'p-3 h-8 w-8 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-gray-200 transition duration-200 focus:outline-none focus:ring-2 focus:ring-red-300';
                 deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3m-5 3h14" /></svg>`;
                 deleteButton.onclick = () => deleteItem(tableName, item.id);
 
-                // Append Order: Handle | Text | Toggle (Done) | Delete
-                li.append(handle, textSpan, toggleButton, deleteButton);
+                // Append Order: Text | Toggle (Done) | Delete
+                li.append(textSpan, toggleButton, deleteButton);
                 element.appendChild(li);
             });
         }
@@ -449,7 +562,6 @@
                 console.error(`Error deleting item from ${tableName}: `, error);
                 showModal("Failed to delete item.");
             }
-            // Realtime listener handles re-render instantly now
         }
 
         async function updateItemOrder(tableName, newOrderList) {
@@ -509,6 +621,13 @@
             
             const rect = target.getBoundingClientRect();
             const offsetY = e.clientY - rect.top;
+
+            // Use the primary color based on the list (reading is primary-blue, todos uses green indicator via CSS)
+            if (target.dataset.table === SUPABASE_TABLE_TODOS) {
+                 indicator.style.borderColor = '#2ecc71';
+            } else {
+                 indicator.style.borderColor = '#3498db';
+            }
 
             if (offsetY < rect.height / 2) {
                 originalParent.insertBefore(indicator, target);
