@@ -148,7 +148,7 @@
                     
                     <button type="submit" id="auth-action-btn"
                             class="w-full bg-primary-blue text-white py-3 rounded-lg font-semibold shadow-md hover:bg-blue-600 transition duration-200">
-                        Sign Up / Log In
+                        Log In
                     </button>
                     <button type="button" onclick="closeAuthModal()"
                             class="w-full mt-3 text-sm text-gray-600 py-2 hover:text-charcoal transition">
@@ -266,36 +266,26 @@ function updateFormState(isLoggedIn) {
         
         // ===================  FIXED AUTH FUNCTION ===================
         async function handleAuthSubmit(e) {
-            e.preventDefault();
-            const email = document.getElementById('auth-email').value;
-            const password = document.getElementById('auth-password').value;
-            const authMsg = document.getElementById('auth-message');
-            authMsg.textContent = '';
-            
-            // First, try to sign up. If the user already exists, this will error.
-            const { error: signUpError } = await supabase.auth.signUp({ email, password });
+    e.preventDefault();
+    const email = document.getElementById('auth-email').value;
+    const password = document.getElementById('auth-password').value;
+    const authMsg = document.getElementById('auth-message');
+    authMsg.textContent = '';
 
-            if (signUpError) {
-                // If the error indicates the user is already registered, try to sign in.
-                if (signUpError.message && signUpError.message.includes("User already registered")) {
-                    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    // Only attempt to sign in the user
+    const { error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password
+    });
 
-                    if (signInError) {
-                        // If login fails, it's likely an incorrect password.
-                        authMsg.textContent = signInError.message;
-                    } else {
-                        // Login was successful.
-                        closeAuthModal();
-                    }
-                } else {
-                    // A different sign-up error occurred (e.g., weak password).
-                    authMsg.textContent = signUpError.message;
-                }
-            } else {
-                // Sign up was successful.
-                authMsg.textContent = 'Sign up successful! Please check your email to confirm.';
-            }
-        }
+    if (error) {
+        // If login fails (e.g., wrong password), show the error
+        authMsg.textContent = error.message;
+    } else {
+        // If login is successful, close the modal
+        closeAuthModal();
+    }
+}
         // =============================================================
 
         async function handleLogout() {
