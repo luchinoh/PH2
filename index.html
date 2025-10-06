@@ -540,18 +540,28 @@ function updateFormState(isLoggedIn) {
         }
 
         async function deleteItem(tableName, id) {
-            if (!supabase || !userId) return;
+    if (!supabase || !userId) return;
 
-            const { error } = await supabase
-                .from(tableName)
-                .delete()
-                .eq('id', id);
-            
-            if (error) {
-                console.error(`Error deleting item from ${tableName}: `, error);
-                showModal("Failed to delete item.");
-            }
+    const { error } = await supabase
+        .from(tableName)
+        .delete()
+        .eq('id', id);
+    
+    if (error) {
+        console.error(`Error deleting item from ${tableName}: `, error);
+        showModal("Failed to delete item.");
+    } else {
+        // --- ADDED THIS BLOCK ---
+        // If deletion was successful, remove the item from the local array and re-render
+        if (tableName === SUPABASE_TABLE_READING) {
+            readingList = readingList.filter(item => item.id !== id);
+        } else {
+            todoList = todoList.filter(item => item.id !== id);
         }
+        renderList(tableName); // Re-draw the list on the screen
+        // --- END OF ADDED BLOCK ---
+    }
+}
 
         async function updateItemOrder(tableName, newOrderList) {
             if (!supabase || !userId) return;
