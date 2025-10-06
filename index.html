@@ -314,18 +314,32 @@
                 
                 const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id);
                 const tableName = draggedItem.dataset.table;
-                const updates = listItems.map((item, index) => ({ id: parseInt(item.dataset.id, 10), order: index + 1 }));
+                
+                // We create the list of updates just like before
+                const updates = listItems.map((item, index) => ({ 
+                    id: parseInt(item.dataset.id, 10), 
+                    order: index + 1 
+                }));
                 
                 if (updates.length > 0) {
-                    const { error } = await supabase.from(tableName).upsert(updates);
+                    // ##### REPLACED UPSERT WITH A LOOP OF UPDATES #####
+                    // This sends an individual update for each reordered item.
+                    const updatePromises = updates.map(item => 
+                        supabase
+                            .from(tableName)
+                            .update({ order: item.order })
+                            .eq('id', item.id)
+                    );
+
+                    // We wait for all update requests to finish
+                    const { error } = await Promise.all(updatePromises);
                     
                     if (error) { 
-                        // ##### ADD THIS LINE TO SEE THE REAL ERROR #####
                         console.error('Supabase error:', error); 
-
                         showModal("Failed to save new order.");
                         fetchAndRenderList(tableName);
                     } else {
+                        // Success! Update the local list state to match the UI.
                         const listToUpdate = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
                         updates.forEach(update => {
                             const item = listToUpdate.find(i => i.id == update.id);
