@@ -216,13 +216,7 @@
                     }
                 });
 
-                const { data: { session } = {} } = await supabase.auth.getSession();
-                
-                if (!session) {
-                    // Try to sign in anonymously first to get a user ID
-                    const { error } = await supabase.auth.signInAnonymously();
-                    if (error) throw error;
-                }
+               
 
             } catch (error) {
                 console.error("Supabase initialization or anonymous sign-in failed:", error);
