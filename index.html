@@ -180,6 +180,17 @@
                 }
             });
         }
+        
+        // --- THIS FUNCTION WAS MISSING ---
+        function updateAuthButton(isLoggedOut, email) {
+            if (isLoggedOut) {
+                authToggleBtn.textContent = 'Login';
+                authToggleBtn.onclick = openAuthModal;
+            } else {
+                authToggleBtn.textContent = `Logged in as ${email}`;
+                authToggleBtn.onclick = () => handleLogout();
+            }
+        }
 
         async function fetchAndRenderList(tableName) {
             if (!userId) { loadingElement.style.display = 'none'; renderAllLists(); return; }
@@ -241,7 +252,7 @@
             const sortedTopLevel = [...todoMap.values()].sort((a,b) => a.order - b.order);
             
             sortedTopLevel.forEach(mainTodo => {
-                const liWrapper = document.createElement('div'); // Wrapper for main item and its sub-tasks
+                const liWrapper = document.createElement('div'); 
                 const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false);
                 
                 const subtaskContainer = document.createElement('div');
@@ -304,6 +315,10 @@
 
             li.append(toggleButton, textSpan);
 
+            if (isSubtask) {
+                li.classList.add('subtask-item');
+            }
+
             if (!isSubtask && !isReading && !item.completed) {
                 const addSubtaskButton = document.createElement('button');
                 addSubtaskButton.className = 'ml-2 flex-shrink-0 p-2 h-8 w-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-500 hover:bg-gray-100 transition';
@@ -314,6 +329,34 @@
             
             li.append(deleteButton);
             return li;
+        }
+
+        function showAddSubtaskInput(parentId) {
+            const existingInput = document.getElementById('temp-subtask-input-container');
+            if (existingInput) existingInput.remove();
+
+            const container = document.querySelector(`[data-parent-id="${parentId}"]`);
+            if (!container) return;
+
+            const inputContainer = document.createElement('div');
+            inputContainer.id = 'temp-subtask-input-container';
+            inputContainer.className = 'p-2 flex items-center space-x-2';
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'Add new sub-task...';
+            input.className = 'flex-grow p-2 border border-gray-300 rounded-lg text-poppins text-sm';
+            
+            const saveButton = document.createElement('button');
+            saveButton.textContent = 'Save';
+            saveButton.className = 'text-poppins text-sm font-semibold bg-primary-blue text-white rounded-lg px-3 py-2';
+            saveButton.onclick = () => { if (input.value.trim()) { addItem(SUPABASE_TABLE_TODOS, input.value, parentId); inputContainer.remove(); } };
+            
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveButton.click(); if (e.key === 'Escape') inputContainer.remove(); });
+
+            inputContainer.append(input, saveButton);
+            container.appendChild(inputContainer);
+            input.focus();
         }
 
         // --- Data Modification ---
@@ -378,7 +421,7 @@
             if (!target || target === draggedItem) return;
 
             const container = target.parentNode;
-            if (draggedItem.parentNode !== container) return; // Prevent dragging between lists
+            if (draggedItem.parentNode !== container) return;
 
             const indicator = container.querySelector('.drag-over-indicator') || document.createElement('div');
             indicator.className = 'drag-over-indicator';
@@ -387,10 +430,6 @@
             const rect = target.getBoundingClientRect();
             if (e.clientY - rect.top < rect.height / 2) container.insertBefore(indicator, target);
             else container.insertBefore(indicator, target.nextSibling);
-        }
-
-        function handleDragLeave(e) {
-            // Cleanup handled in drop/end
         }
         
         function handleDragEnd() {
@@ -401,17 +440,14 @@
 
         function handleDrop(e) {
             e.preventDefault();
-            const dropContainer = e.target.closest('.list-container, .subtask-container');
+            const dropContainer = e.target.closest('#reading-list, #todo-list, .subtask-container');
             const indicator = dropContainer?.querySelector('.drag-over-indicator');
 
             if (draggedItem && indicator) {
                 dropContainer.insertBefore(draggedItem, indicator);
                 
-                const isSublist = dropContainer.classList.contains('subtask-container');
                 const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id);
                 const tableName = draggedItem.dataset.table;
-                const parentId = isSublist ? dropContainer.dataset.parentId : null;
-                
                 const updates = listItems.map((item, index) => ({ id: item.dataset.id, order: index + 1 }));
                 updateOrderInDb(tableName, updates);
             }
@@ -424,6 +460,29 @@
             if (error) { console.error("Failed to save new order:", error); showModal("Failed to save new list order."); }
         }
         
+        // --- Auth & UI State ---
+        function updateFormState(isLoggedIn) {
+            [ 'new-reading-text', 'add-reading-form button', 'new-todo-text', 'add-todo-form button' ]
+                .forEach(selector => document.querySelector(`#${selector}`).disabled = !isLoggedIn);
+            document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Author (Year): *Title* or drag a PDF" : "Please log in";
+            document.getElementById('new-todo-text').placeholder = isLoggedIn ? "Buy milk, study, etc." : "Please log in";
+        }
+        async function handleAuthSubmit(e) {
+            e.preventDefault();
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) document.getElementById('auth-message').textContent = error.message;
+            else closeAuthModal();
+        }
+        async function handleLogout() {
+            await supabase.auth.signOut();
+        }
+        function openAuthModal() { document.getElementById('auth-modal').style.display = 'flex'; }
+        function closeAuthModal() { document.getElementById('auth-modal').style.display = 'none'; }
+        function showModal(message) { document.getElementById('modal-text').textContent = message; document.getElementById('message-area').style.display = 'flex'; }
+        function closeModal() { document.getElementById('message-area').style.display = 'none'; }
+
         // --- Global Event Setup ---
         window.onload = initializeSupabase;
         Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
@@ -431,20 +490,16 @@
         document.getElementById('add-reading-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_READING, document.getElementById('new-reading-text').value); });
         document.getElementById('add-todo-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_TODOS, document.getElementById('new-todo-text').value); });
         
-        // Setup drop zones for DND
-        [readingListElement, todoListElement].forEach(el => {
-            el.addEventListener('dragover', e => e.preventDefault());
-            el.addEventListener('drop', handleDrop);
-        });
-        document.body.addEventListener('drop', handleDrop); // Handle drops on the body for subtask containers
+        document.body.addEventListener('dragover', e => e.preventDefault());
+        document.body.addEventListener('drop', handleDrop);
 
         // PDF Drop Zone
         let dragCounter = 0;
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => document.body.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); }));
-        document.body.addEventListener('dragenter', () => { dragCounter++; document.body.classList.add('file-drag-active'); });
+        document.body.addEventListener('dragenter', (e) => { if (!e.target.closest('.list-container')) { dragCounter++; document.body.classList.add('file-drag-active'); }});
         document.body.addEventListener('dragleave', () => { dragCounter--; if (dragCounter === 0) document.body.classList.remove('file-drag-active'); });
         document.body.addEventListener('drop', e => {
-            if (e.target.closest('.list-container')) return; // Ignore drops in DND zones
+            if (e.target.closest('.list-container')) return; 
             document.body.classList.remove('file-drag-active');
             dragCounter = 0;
             for (const file of e.dataTransfer.files) {
