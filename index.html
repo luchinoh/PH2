@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reading & To-Do Hub</title>
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;700&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Custom Styles for Fonts and Base Layout */
@@ -74,7 +72,6 @@
 </head>
 <body class="min-h-screen p-4 sm:p-8">
 
-    <!-- Auth Toggle Button -->
     <div class="max-w-7xl mx-auto w-full flex justify-end mb-4 px-4 sm:px-6">
         <button id="auth-toggle-btn" 
                 class="text-poppins text-xs font-semibold py-2 px-4 rounded-full bg-charcoal text-white hover:bg-gray-700 transition duration-200"
@@ -83,33 +80,26 @@
         </button>
     </div>
 
-    <!-- Main Application Container -->
     <div id="app" class="max-w-7xl mx-auto w-full p-0">
         <h1 class="text-4xl sm:text-5xl font-garamond font-bold mb-8 text-center border-b pb-4 px-4 sm:px-6">
             Productivity Hub
         </h1>
 
-        <!-- Loading Indicator -->
         <div id="loading" class="flex justify-center items-center py-10" style="display: none;">
             <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-blue"></div>
             <p class="ml-3 text-poppins text-charcoal">Connecting to Supabase...</p>
         </div>
 
-        <!-- TWO COLUMN LAYOUT (50/50 Width) -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:p-6">
             
-            <!-- ====== READING LIST COLUMN (50% Width) ====== -->
             <div id="reading-column" class="bg-white rounded-xl shadow-lg p-6 lg:col-span-1 flex flex-col">
                 <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Reading List</h2>
 
                 <div id="reading-list" class="list-container flex-grow max-h-[60vh] overflow-y-auto space-y-2 mb-4 p-2 border-b border-gray-100">
-                    <!-- Reading List items will be injected here -->
-                </div>
+                    </div>
 
-                <!-- Empty space placeholder for vertical alignment -->
                 <div class="h-[1.75rem] mb-4 mt-auto"></div> 
                 
-                <!-- Reading List Add Item Form -->
                 <form id="add-reading-form" class="flex space-x-2 pt-4">
                     <input type="text" id="new-reading-text" placeholder="Author (Year): *Title* or drag a PDF"
                            class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue text-poppins charcoal-text">
@@ -120,18 +110,14 @@
                 </form>
             </div>
 
-            <!-- ====== TO-DO LIST COLUMN (50% Width) ====== -->
             <div id="todo-column" class="bg-white rounded-xl shadow-lg p-6 lg:col-span-1 flex flex-col">
                 <h2 class="text-3xl font-garamond font-bold mb-4 text-center">To-Do List</h2>
 
                 <div id="todo-list" class="list-container flex-grow max-h-[60vh] overflow-y-auto space-y-2 mb-4 p-2 border-b border-gray-100">
-                    <!-- To-Do List items will be injected here -->
-                </div>
+                    </div>
 
-                <!-- Empty space placeholder for vertical alignment - Must match height of PDF hint -->
                 <div class="h-[1.75rem] mb-4 mt-auto"></div> 
                 
-                <!-- To-Do List Add Item Form -->
                 <form id="add-todo-form" class="flex space-x-2 pt-4">
                     <input type="text" id="new-todo-text" placeholder="Buy milk, Study for class, etc."
                            class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-green text-poppins charcoal-text">
@@ -143,9 +129,6 @@
             </div>
 
         </div>
-        <!-- END TWO COLUMN LAYOUT -->
-
-        <!-- Generic Message/Error Modal -->
         <div id="message-area" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" style="display: none;">
             <div id="message-content" class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center text-poppins">
                 <p class="charcoal-text font-semibold mb-4" id="modal-text">Error</p>
@@ -153,7 +136,6 @@
             </div>
         </div>
 
-        <!-- Login / Sign Up Modal -->
         <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50" style="display: none;">
             <div class="bg-white p-8 rounded-xl shadow-2xl max-w-sm w-full text-poppins">
                 <h3 class="text-2xl font-bold mb-6 text-center">Sync Across Devices</h3>
@@ -178,7 +160,6 @@
 
     </div>
 
-    <!-- Supabase SDK Imports and Core Logic -->
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
@@ -208,9 +189,9 @@
         async function initializeSupabase() {
             loadingElement.style.display = 'flex';
             if (SUPABASE_URL === "YOUR_SUPABASE_URL_HERE" || SUPABASE_ANON_KEY === "YOUR_SUPABASE_ANON_KEY_HERE") {
-                 showModal("Please update the Supabase configuration with your project keys.");
-                 loadingElement.style.display = 'none';
-                 return;
+                showModal("Please update the Supabase configuration with your project keys.");
+                loadingElement.style.display = 'none';
+                return;
             }
 
             try {
@@ -258,11 +239,12 @@
                 authToggleBtn.textContent = `Logged in as ${email}`;
                 authToggleBtn.onclick = () => handleLogout();
             } else {
-                 authToggleBtn.textContent = 'Logout';
-                 authToggleBtn.onclick = () => handleLogout();
+                authToggleBtn.textContent = 'Logout';
+                authToggleBtn.onclick = () => handleLogout();
             }
         }
         
+        // ===================  FIXED AUTH FUNCTION ===================
         async function handleAuthSubmit(e) {
             e.preventDefault();
             const email = document.getElementById('auth-email').value;
@@ -270,40 +252,37 @@
             const authMsg = document.getElementById('auth-message');
             authMsg.textContent = '';
             
-            // Check if user exists first (simple check)
-            let { data: { users }, error: searchError } = await supabase.auth.admin.listUsers();
-            
-            if (searchError) {
-                // If search fails (usually due to lack of admin key, rely on standard flow)
-            }
-            
-            const userExists = users?.some(user => user.email === email);
+            // First, try to sign up. If the user already exists, this will error.
+            const { error: signUpError } = await supabase.auth.signUp({ email, password });
 
-            if (userExists) {
-                 // Attempt Login
-                 const { error } = await supabase.auth.signInWithPassword({ email, password });
-                 if (error) {
-                    authMsg.textContent = error.message;
-                    return;
-                 }
-                 closeAuthModal();
+            if (signUpError) {
+                // If the error indicates the user is already registered, try to sign in.
+                if (signUpError.message && signUpError.message.includes("User already registered")) {
+                    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+
+                    if (signInError) {
+                        // If login fails, it's likely an incorrect password.
+                        authMsg.textContent = signInError.message;
+                    } else {
+                        // Login was successful.
+                        closeAuthModal();
+                    }
+                } else {
+                    // A different sign-up error occurred (e.g., weak password).
+                    authMsg.textContent = signUpError.message;
+                }
             } else {
-                 // Attempt Sign Up
-                 const { error } = await supabase.auth.signUp({ email, password });
-                 if (error) {
-                    authMsg.textContent = error.message;
-                    return;
-                 }
-                 authMsg.textContent = 'Sign up successful! Please check your email to confirm.';
-                 // Keep modal open briefly for confirmation message
+                // Sign up was successful.
+                authMsg.textContent = 'Sign up successful! Please check your email to confirm.';
             }
         }
+        // =============================================================
 
         async function handleLogout() {
             const { error } = await supabase.auth.signOut();
             if (error) {
-                 console.error("Logout error:", error);
-                 showModal("Error logging out.");
+                console.error("Logout error:", error);
+                showModal("Error logging out.");
             }
         }
 
@@ -358,8 +337,8 @@
 
         async function fetchAndRenderList(tableName) {
              if (!userId) {
-                loadingElement.style.display = 'none';
-                return; 
+                 loadingElement.style.display = 'none';
+                 return; 
              }
              
             const { data, error } = await supabase
@@ -624,9 +603,9 @@
 
             // Use the primary color based on the list (reading is primary-blue, todos uses green indicator via CSS)
             if (target.dataset.table === SUPABASE_TABLE_TODOS) {
-                 indicator.style.borderColor = '#2ecc71';
+                indicator.style.borderColor = '#2ecc71';
             } else {
-                 indicator.style.borderColor = '#3498db';
+                indicator.style.borderColor = '#3498db';
             }
 
             if (offsetY < rect.height / 2) {
@@ -693,7 +672,7 @@
         document.body.addEventListener('dragenter', (e) => {
             dragCounter++;
             if (e.dataTransfer.items && e.dataTransfer.items.length) {
-                 document.body.classList.add('file-drag-active');
+                document.body.classList.add('file-drag-active');
             }
         }, false);
         
