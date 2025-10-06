@@ -581,38 +581,54 @@ if (isSubtask) {
 
         async function addItem(tableName, text, parentId = null) {
     if (!supabase || !userId || !text.trim()) return;
-    
-    // ... (the first part of the function is the same)
+
     const currentList = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
+    
     const itemsToOrder = parentId 
         ? currentList.filter(item => item.parent_id === parentId)
         : currentList.filter(item => !item.parent_id);
+
     const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
+    
     const itemToAdd = {
         user_id: userId, 
         text: text.trim(),
         completed: false,
         order: newOrder,
     };
+
     if (tableName === SUPABASE_TABLE_TODOS) {
         itemToAdd.parent_id = parentId;
     }
 
-    const { error } = await supabase.from(tableName).insert(itemToAdd);
+    // --- MODIFIED THIS LINE ---
+    // Ask Supabase to return the newly created item
+    const { data: newData, error } = await supabase
+        .from(tableName)
+        .insert(itemToAdd)
+        .select()
+        .single(); // Use .single() because we are only inserting one item
 
     if (error) {
         console.error(`Error adding item to ${tableName}: `, error);
         showModal(`Failed to add item. Check RLS policies.`);
     } else {
+        // --- REPLACED THE OLD LOGIC WITH THIS ---
+        // Add the new item to our local list
+        if (tableName === SUPABASE_TABLE_READING) {
+            readingList.push(newData);
+        } else {
+            todoList.push(newData);
+        }
+        // Re-render all lists with the new local data
+        renderAllLists();
+        
         // Clear input forms
         if (tableName === SUPABASE_TABLE_READING) {
             document.getElementById('new-reading-text').value = '';
         } else if (!parentId) {
             document.getElementById('new-todo-text').value = '';
         }
-        
-        // --- THIS IS THE NEW LINE ---
-        fetchAndRenderList(tableName); // Immediately refresh the list from the database
     }
 }
 
