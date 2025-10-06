@@ -742,6 +742,11 @@ function updateFormState(isLoggedIn) {
 
         window.onload = initializeSupabase;
 
+// Add these lines at the very end of your script
+window.handleAuthSubmit = handleAuthSubmit;
+window.openAuthModal = openAuthModal;
+window.closeAuthModal = closeAuthModal;
+
     </script>
 </body>
 </html>
