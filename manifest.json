@@ -1,0 +1,1 @@
+{ "name": "Productivity Hub", "short_name": "ProductHub", "start_url": ".", "display": "standalone","background_color": "#F8F7F4", "theme_color": "#3498db", "description": "A personal hub for readings and tasks.","icons": [ { "src": "icon-512x512.png", "sizes": "512x512", "type": "image/png" } ] }
