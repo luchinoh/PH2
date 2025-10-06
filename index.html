@@ -17,7 +17,11 @@
         .list-container::-webkit-scrollbar-thumb { background-color: #bdc3c7; border-radius: 4px; }
         .drag-over-indicator { border-top: 2px solid #3498db; margin-top: -2px; height: 0; }
         .file-drag-active { box-shadow: 0 0 0 4px #3498db inset; }
-        .subtask-container { padding-left: 1.5rem; }
+        /* Final Sub-task indentation */
+        .subtask-container {
+            padding-left: 1.5rem; 
+            width: 100%;
+        }
     </style>
     <script>
         tailwind.config = {
@@ -177,6 +181,7 @@
 
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragend', handleDragEnd);
+            li.addEventListener('dragenter', handleDragEnter); // Added this listener back
             li.addEventListener('dragleave', handleDragLeave);
 
             const isReading = tableName === SUPABASE_TABLE_READING;
@@ -258,46 +263,65 @@
             if (error) { showModal("Failed to delete item."); } 
             else { if (tableName === SUPABASE_TABLE_READING) readingList = readingList.filter(i => i.id !== id); else todoList = todoList.filter(i => i.id !== id); renderAllLists(); }
         }
-
+        
         let draggedItem = null;
         function handleDragStart(e) { draggedItem = this; setTimeout(() => this.classList.add('drag-source'), 0); }
-        function handleDragEnd() { draggedItem?.classList.remove('drag-source'); draggedItem = null; }
+        function handleDragEnd() {
+            draggedItem?.classList.remove('drag-source');
+            document.querySelectorAll('.drag-over-indicator').forEach(el => el.remove());
+            draggedItem = null;
+        }
+        function handleDragLeave(e) { }
         
-        // --- THIS FUNCTION WAS MISSING ---
-        function handleDragLeave(e) {
-            // This can be empty, its presence prevents an error.
+        function handleDragEnter(e) {
+            e.preventDefault();
+            if (!draggedItem) return;
+            const target = e.target.closest('[draggable="true"]');
+            if (!target || target === draggedItem) return;
+            const container = target.parentNode;
+            if (draggedItem.parentNode !== container) return;
+            
+            const indicator = container.querySelector('.drag-over-indicator') || document.createElement('div');
+            indicator.className = 'drag-over-indicator';
+            indicator.style.borderColor = container.id.includes('todo') ? '#2ecc71' : '#3498db';
+            
+            const rect = target.getBoundingClientRect();
+            if (e.clientY - rect.top < rect.height / 2) container.insertBefore(indicator, target);
+            else container.insertBefore(indicator, target.nextSibling);
         }
 
         async function handleDrop(e) {
             e.preventDefault();
-            if (!draggedItem) return;
+            if (!draggedItem) return handleDragEnd();
+            
             const dropContainer = e.target.closest('.list-container, .subtask-container');
-            if (!dropContainer) return;
+            const indicator = dropContainer?.querySelector('.drag-over-indicator');
 
-            let target = e.target.closest('[draggable="true"]');
-            if (target && target.parentNode !== dropContainer) { target = null; }
-            
-            if (draggedItem.parentNode === dropContainer) {
-                 if (target) {
-                     const rect = target.getBoundingClientRect();
-                     if (e.clientY > rect.top + rect.height / 2) dropContainer.insertBefore(draggedItem, target.nextSibling);
-                     else dropContainer.insertBefore(draggedItem, target);
-                 } else {
-                     dropContainer.appendChild(draggedItem);
-                 }
-            }
-            
-            const newOrderedIds = [...dropContainer.children].filter(c => c.dataset.id).map(c => c.dataset.id);
-            const updates = newOrderedIds.map((id, index) => ({ id: id, order: index + 1 }));
-            if (updates.length > 0) {
-                const { error } = await supabase.from(draggedItem.dataset.table).upsert(updates);
-                if (error) { showModal("Failed to save new order."); } 
-                else { updates.forEach(update => { const list = (draggedItem.dataset.table === SUPABASE_TABLE_READING) ? readingList : todoList; const item = list.find(i => i.id === update.id); if(item) item.order = update.order; }); }
+            if (dropContainer && indicator && draggedItem.parentNode === dropContainer) {
+                dropContainer.insertBefore(draggedItem, indicator);
+                
+                const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id);
+                const tableName = draggedItem.dataset.table;
+                const updates = listItems.map((item, index) => ({ id: item.dataset.id, order: index + 1 }));
+                
+                if (updates.length > 0) {
+                    const { error } = await supabase.from(tableName).upsert(updates);
+                    if (error) { 
+                        showModal("Failed to save new order.");
+                        renderAllLists(); // Re-render to revert visual change on failure
+                    } else {
+                        updates.forEach(update => {
+                            const list = (tableName === SUPABASE_TABLE_READING) ? readingList : todoList;
+                            const item = list.find(i => i.id === update.id);
+                            if (item) item.order = update.order;
+                        });
+                    }
+                }
             }
             handleDragEnd();
         }
 
-        ['dragover', 'dragenter'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
+        ['dragover'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
         
         function updateAuthButton(isLoggedOut, email) {
