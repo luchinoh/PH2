@@ -181,7 +181,6 @@
             });
         }
         
-        // --- THIS FUNCTION WAS MISSING ---
         function updateAuthButton(isLoggedOut, email) {
             if (isLoggedOut) {
                 authToggleBtn.textContent = 'Login';
@@ -208,7 +207,7 @@
         function setupRealtimeListener(tableName) {
             if (!userId) return; 
             const channel = supabase.channel(`changes-${tableName}-${userId}`);
-            if (channel.state === 'joined') return; // Prevent duplicate listeners
+            if (channel.state === 'joined') return; 
             
             channel.on('postgres_changes', 
                 { event: '*', schema: 'public', table: tableName, filter: `user_id=eq.${userId}` },
@@ -252,7 +251,7 @@
             const sortedTopLevel = [...todoMap.values()].sort((a,b) => a.order - b.order);
             
             sortedTopLevel.forEach(mainTodo => {
-                const liWrapper = document.createElement('div'); 
+                const liWrapper = document.createElement('div');
                 const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false);
                 
                 const subtaskContainer = document.createElement('div');
@@ -432,6 +431,11 @@
             else container.insertBefore(indicator, target.nextSibling);
         }
         
+        // --- THIS FUNCTION WAS MISSING ---
+        function handleDragLeave() { 
+            // Cleanup is handled by other drag events, so this can be empty.
+        }
+        
         function handleDragEnd() {
             draggedItem?.classList.remove('drag-source');
             document.querySelectorAll('.drag-over-indicator').forEach(el => el.remove());
@@ -462,8 +466,11 @@
         
         // --- Auth & UI State ---
         function updateFormState(isLoggedIn) {
-            [ 'new-reading-text', 'add-reading-form button', 'new-todo-text', 'add-todo-form button' ]
-                .forEach(selector => document.querySelector(`#${selector}`).disabled = !isLoggedIn);
+            document.getElementById('new-reading-text').disabled = !isLoggedIn;
+            document.querySelector('#add-reading-form button').disabled = !isLoggedIn;
+            document.getElementById('new-todo-text').disabled = !isLoggedIn;
+            document.querySelector('#add-todo-form button').disabled = !isLoggedIn;
+
             document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Author (Year): *Title* or drag a PDF" : "Please log in";
             document.getElementById('new-todo-text').placeholder = isLoggedIn ? "Buy milk, study, etc." : "Please log in";
         }
