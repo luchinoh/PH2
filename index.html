@@ -314,13 +314,15 @@
                 
                 const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id);
                 const tableName = draggedItem.dataset.table;
-                // After
-const updates = listItems.map((item, index) => ({ id: parseInt(item.dataset.id, 10), order: index + 1 }));
+                const updates = listItems.map((item, index) => ({ id: parseInt(item.dataset.id, 10), order: index + 1 }));
                 
                 if (updates.length > 0) {
                     const { error } = await supabase.from(tableName).upsert(updates);
                     
                     if (error) { 
+                        // ##### ADD THIS LINE TO SEE THE REAL ERROR #####
+                        console.error('Supabase error:', error); 
+
                         showModal("Failed to save new order.");
                         fetchAndRenderList(tableName);
                     } else {
