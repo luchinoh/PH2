@@ -136,6 +136,7 @@
             list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING, false)));
         }
         
+        // ##### UPDATED FUNCTION #####
         function renderTodoList() {
             todoListElement.innerHTML = '';
             if (todoList.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">You have no tasks!</p>`; return; }
@@ -147,7 +148,6 @@
             const sortedTopLevel = [...todoMap.values()].sort((a,b) => a.completed - b.completed || a.order - b.order);
             
             sortedTopLevel.forEach(mainTodo => {
-                const wrapper = document.createElement('div'); // The wrapper is back!
                 const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false);
                 const subtaskContainer = document.createElement('div');
                 subtaskContainer.className = 'mt-1 space-y-1 subtask-container';
@@ -157,9 +157,8 @@
                     subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
                 });
                 
-                wrapper.appendChild(mainLi);
-                wrapper.appendChild(subtaskContainer);
-                todoListElement.appendChild(wrapper);
+                todoListElement.appendChild(mainLi);
+                todoListElement.appendChild(subtaskContainer);
             });
         }
 
@@ -294,6 +293,7 @@
             else container.insertBefore(indicator, target.nextSibling);
         }
 
+        // ##### UPDATED FUNCTION #####
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -304,7 +304,6 @@
             const isDraggedSubtask = draggedItem.dataset.isSubtask === 'true';
             const isDropOnSubtaskContainer = dropContainer.classList.contains('subtask-container');
 
-            // Prevent invalid drops (main into sublist, sublist into main list)
             if (isDraggedSubtask !== isDropOnSubtaskContainer && dropContainer.id !== 'reading-list') {
                 return handleDragEnd();
             }
@@ -319,12 +318,16 @@
                 
                 if (updates.length > 0) {
                     const { error } = await supabase.from(tableName).upsert(updates);
+                    
                     if (error) { 
                         showModal("Failed to save new order.");
-                        fetchAndRenderList(tableName); // Revert on failure
-                    } else {
-                        // On success, just refetch to ensure perfect state sync
                         fetchAndRenderList(tableName);
+                    } else {
+                        const listToUpdate = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
+                        updates.forEach(update => {
+                            const item = listToUpdate.find(i => i.id == update.id);
+                            if (item) item.order = update.order;
+                        });
                     }
                 }
             }
