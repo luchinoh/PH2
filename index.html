@@ -136,7 +136,6 @@
             list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING, false)));
         }
         
-        // ##### UPDATED FUNCTION #####
         function renderTodoList() {
             todoListElement.innerHTML = '';
             if (todoList.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">You have no tasks!</p>`; return; }
@@ -148,9 +147,10 @@
             const sortedTopLevel = [...todoMap.values()].sort((a,b) => a.completed - b.completed || a.order - b.order);
             
             sortedTopLevel.forEach(mainTodo => {
-                const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false);
+                const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, mainTodo.children.length);
                 const subtaskContainer = document.createElement('div');
-                subtaskContainer.className = 'mt-1 space-y-1 subtask-container';
+                
+                subtaskContainer.className = 'mt-1 space-y-1 subtask-container hidden';
                 subtaskContainer.dataset.parentId = mainTodo.id;
 
                 mainTodo.children.sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
@@ -162,7 +162,7 @@
             });
         }
 
-        function createItemElement(item, tableName, isSubtask) {
+        function createItemElement(item, tableName, isSubtask, childCount = 0) {
             const li = document.createElement('div');
             li.id = `${tableName}-${item.id}`;
             li.dataset.id = item.id;
@@ -185,6 +185,22 @@
             li.addEventListener('dragend', handleDragEnd);
             li.addEventListener('dragenter', handleDragEnter);
             li.addEventListener('dragleave', handleDragLeave);
+            
+            if (!isSubtask && childCount > 0) {
+                const toggleButton = document.createElement('button');
+                toggleButton.className = 'mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors';
+                toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
+                
+                toggleButton.onclick = function() {
+                    const parentElement = this.closest('[data-id]');
+                    const subtaskContainer = parentElement.nextElementSibling;
+                    if (subtaskContainer && subtaskContainer.classList.contains('subtask-container')) {
+                        subtaskContainer.classList.toggle('hidden');
+                        this.querySelector('svg').classList.toggle('rotate-90');
+                    }
+                };
+                li.appendChild(toggleButton);
+            }
 
             const isReading = tableName === SUPABASE_TABLE_READING;
             const primaryColor = isReading ? 'primary-blue' : 'primary-green';
@@ -293,7 +309,6 @@
             else container.insertBefore(indicator, target.nextSibling);
         }
 
-        // ##### UPDATED FUNCTION #####
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -315,15 +330,12 @@
                 const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id);
                 const tableName = draggedItem.dataset.table;
                 
-                // We create the list of updates just like before
                 const updates = listItems.map((item, index) => ({ 
                     id: parseInt(item.dataset.id, 10), 
                     order: index + 1 
                 }));
                 
                 if (updates.length > 0) {
-                    // ##### REPLACED UPSERT WITH A LOOP OF UPDATES #####
-                    // This sends an individual update for each reordered item.
                     const updatePromises = updates.map(item => 
                         supabase
                             .from(tableName)
@@ -331,7 +343,6 @@
                             .eq('id', item.id)
                     );
 
-                    // We wait for all update requests to finish
                     const { error } = await Promise.all(updatePromises);
                     
                     if (error) { 
@@ -339,7 +350,6 @@
                         showModal("Failed to save new order.");
                         fetchAndRenderList(tableName);
                     } else {
-                        // Success! Update the local list state to match the UI.
                         const listToUpdate = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
                         updates.forEach(update => {
                             const item = listToUpdate.find(i => i.id == update.id);
