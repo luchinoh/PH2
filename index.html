@@ -49,6 +49,32 @@
         .file-drag-active {
             box-shadow: 0 0 0 4px #3498db inset;
         }
+        .subtask-container {
+    position: relative;
+    /* Creates the main vertical line */
+}
+.subtask-container::before {
+    content: '';
+    position: absolute;
+    left: -1rem; /* Position to the left of the sub-tasks */
+    top: 0;
+    bottom: 0.5rem; /* End the line slightly above the bottom */
+    width: 2px;
+    background-color: #e0e0e0; /* A light gray line */
+}
+
+.subtask-item {
+    position: relative;
+}
+.subtask-item::before {
+    content: '';
+    position: absolute;
+    left: -1rem; /* Align with the vertical line */
+    top: 1.1rem; /* Vertically center with the sub-task */
+    width: 0.75rem; /* The horizontal part of the "L" shape */
+    height: 2px;
+    background-color: #e0e0e0;
+}
     </style>
     <script>
         // Tailwind Configuration for custom colors and fonts
@@ -495,6 +521,13 @@
 
             li.append(toggleButton, textSpan);
 
+// --- ADD THIS NEW BLOCK RIGHT HERE ---
+if (isSubtask) {
+    li.classList.add('subtask-item');
+}
+// ------------------------------------
+
+
             if (!isSubtask && !item.completed) {
                 const addSubtaskButton = document.createElement('button');
                 addSubtaskButton.className = 'ml-2 p-2 h-8 w-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-500 hover:bg-gray-100 transition';
@@ -547,40 +580,41 @@
         }
 
         async function addItem(tableName, text, parentId = null) {
-            if (!supabase || !userId || !text.trim()) return;
-            
-            const currentList = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
-            
-            const itemsToOrder = parentId 
-                ? currentList.filter(item => item.parent_id === parentId)
-                : currentList.filter(item => !item.parent_id);
+    if (!supabase || !userId || !text.trim()) return;
+    
+    // ... (the first part of the function is the same)
+    const currentList = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
+    const itemsToOrder = parentId 
+        ? currentList.filter(item => item.parent_id === parentId)
+        : currentList.filter(item => !item.parent_id);
+    const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
+    const itemToAdd = {
+        user_id: userId, 
+        text: text.trim(),
+        completed: false,
+        order: newOrder,
+    };
+    if (tableName === SUPABASE_TABLE_TODOS) {
+        itemToAdd.parent_id = parentId;
+    }
 
-            const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
-            
-            const itemToAdd = {
-                user_id: userId, 
-                text: text.trim(),
-                completed: false,
-                order: newOrder,
-            };
+    const { error } = await supabase.from(tableName).insert(itemToAdd);
 
-            if (tableName === SUPABASE_TABLE_TODOS) {
-                itemToAdd.parent_id = parentId;
-            }
-
-            const { error } = await supabase.from(tableName).insert(itemToAdd);
-
-            if (error) {
-                console.error(`Error adding item to ${tableName}: `, error);
-                showModal(`Failed to add item. Check RLS policies.`);
-            } else {
-                if (tableName === SUPABASE_TABLE_READING) {
-                    document.getElementById('new-reading-text').value = '';
-                } else if (!parentId) {
-                    document.getElementById('new-todo-text').value = '';
-                }
-            }
+    if (error) {
+        console.error(`Error adding item to ${tableName}: `, error);
+        showModal(`Failed to add item. Check RLS policies.`);
+    } else {
+        // Clear input forms
+        if (tableName === SUPABASE_TABLE_READING) {
+            document.getElementById('new-reading-text').value = '';
+        } else if (!parentId) {
+            document.getElementById('new-todo-text').value = '';
         }
+        
+        // --- THIS IS THE NEW LINE ---
+        fetchAndRenderList(tableName); // Immediately refresh the list from the database
+    }
+}
 
         async function toggleCompleted(tableName, id, status) {
             if (!supabase || !userId) return;
