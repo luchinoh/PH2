@@ -347,10 +347,12 @@
             else container.insertBefore(indicator, target.nextSibling);
         }
 
+        // 🔻 BUG FIX START 🔻
+        // This function is fully replaced to handle UUIDs correctly.
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
-            
+
             const dropContainer = e.target.closest('.list-container, .subtask-container');
             if (!dropContainer) return handleDragEnd();
 
@@ -364,47 +366,54 @@
             const indicator = dropContainer.querySelector('.drag-over-indicator');
             if (indicator) {
                 dropContainer.insertBefore(draggedItem, indicator);
-                
+
                 const tableName = draggedItem.dataset.table;
 
                 const listItems = Array.from(dropContainer.children)
                     .filter(el => el.dataset.id && !isNaN(parseInt(el.dataset.id, 10)));
 
-                const seen = new Set();
                 const updates = listItems
-                    .map((item, index) => ({
-                        id: parseInt(item.dataset.id, 10),
-                        order: index + 1
-                    }))
-                    .filter(item => {
-                        if (seen.has(item.id)) return false;
-                        seen.add(item.id);
-                        return Number.isInteger(item.id) && item.id > 0;
+                    .map((item, index) => {
+                        // **THE FIX**: Check the table name. For 'todos', use the ID as a string (UUID).
+                        // For other tables (like 'reading_list'), parse it as an integer.
+                        const id = tableName === SUPABASE_TABLE_TODOS 
+                            ? item.dataset.id 
+                            : parseInt(item.dataset.id, 10);
+                        
+                        return {
+                            id: id,
+                            order: index + 1
+                        };
                     });
-                
-                if (updates.length > 0) {
-                    // 🔻 BUG FIX START 🔻
-                    // Replace concurrent updates with a single 'upsert' call 
-                    // to prevent race conditions and unique constraint violations.
-                    const { error } = await supabase.from(tableName).upsert(updates);
+
+                // Filter out any potential duplicates or bad data as a safeguard.
+                const seen = new Set();
+                const cleanUpdates = updates.filter(item => {
+                    if (seen.has(item.id)) return false;
+                    seen.add(item.id);
+                    return item.id != null;
+                });
+
+                if (cleanUpdates.length > 0) {
+                    const { error } = await supabase.from(tableName).upsert(cleanUpdates);
 
                     if (error) {
                         console.error('Supabase reorder error:', error);
                         showModal("Failed to save new order.");
-                        fetchAndRenderList(tableName); // Re-fetch to revert optimistic UI change
+                        fetchAndRenderList(tableName);
                     } else {
-                        // On success, update the local state to match the new order.
                         const listToUpdate = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-                        updates.forEach(update => {
+                        cleanUpdates.forEach(update => {
                             const item = listToUpdate.find(i => i.id == update.id);
                             if (item) item.order = update.order;
                         });
                     }
-                    // 🔺 BUG FIX END 🔺
                 }
             }
             handleDragEnd();
         }
+        // 🔺 BUG FIX END 🔺
+
 
         ['dragover'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
