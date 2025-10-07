@@ -138,8 +138,8 @@
         }
         
         function renderTodoList() {
-const openContainers = document.querySelectorAll('.subtask-container:not(.hidden)');
-expandedTodoParents = new Set(Array.from(openContainers).map(c => c.dataset.parentId));
+			const openContainers = document.querySelectorAll('.subtask-container:not(.hidden)');
+			expandedTodoParents = new Set(Array.from(openContainers).map(c => c.dataset.parentId));
             todoListElement.innerHTML = '';
             if (todoList.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">You have no tasks!</p>`; return; }
 
@@ -164,13 +164,13 @@ expandedTodoParents = new Set(Array.from(openContainers).map(c => c.dataset.pare
                 todoListElement.appendChild(subtaskContainer);
             });
             expandedTodoParents.forEach(id => {
-    const container = document.querySelector(`.subtask-container[data-parent-id="${id}"]`);
-    if (container) {
-        container.classList.remove('hidden');
-        const toggleIcon = container.previousElementSibling?.querySelector('.subtask-toggle-btn svg');
-        if (toggleIcon) toggleIcon.classList.add('rotate-90');
-    }
-});
+				const container = document.querySelector(`.subtask-container[data-parent-id="${id}"]`);
+				if (container) {
+					container.classList.remove('hidden');
+					const toggleIcon = container.previousElementSibling?.querySelector('.subtask-toggle-btn svg');
+					if (toggleIcon) toggleIcon.classList.add('rotate-90');
+				}
+			});
         }
 
         function createItemElement(item, tableName, isSubtask, childCount = 0) {
@@ -246,58 +246,58 @@ expandedTodoParents = new Set(Array.from(openContainers).map(c => c.dataset.pare
         }
 
         function showAddSubtaskInput(parentId) {
-    const existingInput = document.getElementById('temp-subtask-input-container');
-    if (existingInput) existingInput.remove();
-    
-    const container = document.querySelector(`[data-parent-id="${parentId}"]`);
-    if (!container) return;
+			const existingInput = document.getElementById('temp-subtask-input-container');
+			if (existingInput) existingInput.remove();
+			
+			const container = document.querySelector(`[data-parent-id="${parentId}"]`);
+			if (!container) return;
 
-    container.classList.remove('hidden');
-    const parentLi = container.previousElementSibling;
-    if (parentLi) {
-        const toggleIcon = parentLi.querySelector('.subtask-toggle-btn svg');
-        if (toggleIcon) toggleIcon.classList.add('rotate-90');
-    }
+			container.classList.remove('hidden');
+			const parentLi = container.previousElementSibling;
+			if (parentLi) {
+				const toggleIcon = parentLi.querySelector('.subtask-toggle-btn svg');
+				if (toggleIcon) toggleIcon.classList.add('rotate-90');
+			}
 
-    const inputContainer = document.createElement('div');
-    inputContainer.id = 'temp-subtask-input-container';
-    inputContainer.className = 'p-2 flex items-center space-x-2';
+			const inputContainer = document.createElement('div');
+			inputContainer.id = 'temp-subtask-input-container';
+			inputContainer.className = 'p-2 flex items-center space-x-2';
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.placeholder = 'Add new sub-task...';
-    input.className = 'flex-grow p-2 border rounded-lg text-poppins text-sm';
+			const input = document.createElement('input');
+			input.type = 'text';
+			input.placeholder = 'Add new sub-task...';
+			input.className = 'flex-grow p-2 border rounded-lg text-poppins text-sm';
 
-    const saveButton = document.createElement('button');
-    saveButton.textContent = 'Save';
-    saveButton.className = 'text-poppins text-sm font-semibold bg-primary-blue text-white rounded-lg px-3 py-2';
+			const saveButton = document.createElement('button');
+			saveButton.textContent = 'Save';
+			saveButton.className = 'text-poppins text-sm font-semibold bg-primary-blue text-white rounded-lg px-3 py-2';
 
-    const saveAndCleanup = async () => {
-        if (input.value.trim()) {
-            input.disabled = true;
-            saveButton.disabled = true;
-            await addItem(SUPABASE_TABLE_TODOS, input.value, parentId);
-        }
-        inputContainer.remove(); // always remove cleanly
-    };
+			const saveAndCleanup = async () => {
+				if (input.value.trim()) {
+					input.disabled = true;
+					saveButton.disabled = true;
+					await addItem(SUPABASE_TABLE_TODOS, input.value, parentId);
+				}
+				inputContainer.remove(); // always remove cleanly
+			};
 
-    saveButton.onclick = saveAndCleanup;
-    input.addEventListener('keydown', e => {
-        if (e.key === 'Enter') saveAndCleanup();
-        if (e.key === 'Escape') inputContainer.remove();
-    });
+			saveButton.onclick = saveAndCleanup;
+			input.addEventListener('keydown', e => {
+				if (e.key === 'Enter') saveAndCleanup();
+				if (e.key === 'Escape') inputContainer.remove();
+			});
 
-    inputContainer.append(input, saveButton);
-    container.appendChild(inputContainer);
-    input.focus();
-}
+			inputContainer.append(input, saveButton);
+			container.appendChild(inputContainer);
+			input.focus();
+		}
 
         async function addItem(tableName, text, parentId = null) {
             if (!userId || !text.trim()) return;
             const currentList = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
             const itemsToOrder = currentList.filter(i => 
-    (parentId ? i.parent_id === parentId : (i.parent_id === null || i.parent_id === undefined))
-);
+				(parentId ? i.parent_id === parentId : (i.parent_id === null || i.parent_id === undefined))
+			);
             const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
             const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder };
             if (tableName === SUPABASE_TABLE_TODOS) itemToAdd.parent_id = parentId;
@@ -367,45 +367,40 @@ expandedTodoParents = new Set(Array.from(openContainers).map(c => c.dataset.pare
                 
                 const tableName = draggedItem.dataset.table;
 
-const listItems = Array.from(dropContainer.children)
-  .filter(el => el.dataset.id && !isNaN(parseInt(el.dataset.id, 10)));
+                const listItems = Array.from(dropContainer.children)
+                    .filter(el => el.dataset.id && !isNaN(parseInt(el.dataset.id, 10)));
 
-const seen = new Set();
-const updates = listItems
-  .map((item, index) => ({
-      id: parseInt(item.dataset.id, 10),
-      order: index + 1
-  }))
-  .filter(item => {
-      if (seen.has(item.id)) return false;
-      seen.add(item.id);
-      return Number.isInteger(item.id) && item.id > 0;
-  });
+                const seen = new Set();
+                const updates = listItems
+                    .map((item, index) => ({
+                        id: parseInt(item.dataset.id, 10),
+                        order: index + 1
+                    }))
+                    .filter(item => {
+                        if (seen.has(item.id)) return false;
+                        seen.add(item.id);
+                        return Number.isInteger(item.id) && item.id > 0;
+                    });
                 
                 if (updates.length > 0) {
-                    const updatePromises = updates.map(item => 
-                        supabase
-                            .from(tableName)
-                            .update({ order: item.order })
-                            .eq('id', item.id)
-                    );
+                    // 🔻 BUG FIX START 🔻
+                    // Replace concurrent updates with a single 'upsert' call 
+                    // to prevent race conditions and unique constraint violations.
+                    const { error } = await supabase.from(tableName).upsert(updates);
 
-                    const results = await Promise.all(updatePromises);
-console.log('Order updates:', updates);
-console.log('Supabase results:', results);
-const anyError = results.some(r => r.error);
-if (anyError) {
-    console.error('Supabase reorder error:', results);
-    showModal("Failed to save new order.");
-    fetchAndRenderList(tableName);
-} else {
-    const listToUpdate = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-    updates.forEach(update => {
-        const item = listToUpdate.find(i => i.id == update.id);
-        if (item) item.order = update.order;
-    });
-}
-
+                    if (error) {
+                        console.error('Supabase reorder error:', error);
+                        showModal("Failed to save new order.");
+                        fetchAndRenderList(tableName); // Re-fetch to revert optimistic UI change
+                    } else {
+                        // On success, update the local state to match the new order.
+                        const listToUpdate = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
+                        updates.forEach(update => {
+                            const item = listToUpdate.find(i => i.id == update.id);
+                            if (item) item.order = update.order;
+                        });
+                    }
+                    // 🔺 BUG FIX END 🔺
                 }
             }
             handleDragEnd();
@@ -436,65 +431,65 @@ if (anyError) {
         function showModal(message) { document.getElementById('modal-text').textContent = message; document.getElementById('message-area').style.display = 'flex'; }
         function closeModal() { document.getElementById('message-area').style.display = 'none'; }
 
-// --- Drag & Drop PDF-to-ReadingList feature (supports multi-authors) ---
-const readingListDropZone = document.getElementById('reading-column');
+		// --- Drag & Drop PDF-to-ReadingList feature (supports multi-authors) ---
+		const readingListDropZone = document.getElementById('reading-column');
 
-// Visual feedback when dragging files over
-['dragenter', 'dragover'].forEach(evt => {
-    readingListDropZone.addEventListener(evt, e => {
-        e.preventDefault();
-        if (e.dataTransfer?.types?.includes('Files')) {
-            readingListDropZone.classList.add('file-drag-active');
-        }
-    });
-});
+		// Visual feedback when dragging files over
+		['dragenter', 'dragover'].forEach(evt => {
+			readingListDropZone.addEventListener(evt, e => {
+				e.preventDefault();
+				if (e.dataTransfer?.types?.includes('Files')) {
+					readingListDropZone.classList.add('file-drag-active');
+				}
+			});
+		});
 
-['dragleave', 'drop'].forEach(evt => {
-    readingListDropZone.addEventListener(evt, e => {
-        e.preventDefault();
-        readingListDropZone.classList.remove('file-drag-active');
-    });
-});
+		['dragleave', 'drop'].forEach(evt => {
+			readingListDropZone.addEventListener(evt, e => {
+				e.preventDefault();
+				readingListDropZone.classList.remove('file-drag-active');
+			});
+		});
 
-// Handle dropped PDFs
-readingListDropZone.addEventListener('drop', async e => {
-    e.preventDefault();
-    if (!userId) return showModal('Please log in to add to your reading list.');
+		// Handle dropped PDFs
+		readingListDropZone.addEventListener('drop', async e => {
+			e.preventDefault();
+			if (!userId) return showModal('Please log in to add to your reading list.');
 
-    const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
-    if (files.length === 0) return;
+			const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+			if (files.length === 0) return;
 
-    for (const file of files) {
-        // Example: "smith&jones_2020_quantum-mechanics.pdf"
-        const base = file.name.replace(/\.pdf$/i, '');
-        const parts = base.split('_');
-        if (parts.length < 3) {
-            // fallback if format isn't correct
-            await addItem(SUPABASE_TABLE_READING, file.name);
-            continue;
-        }
+			for (const file of files) {
+				// Example: "smith&jones_2020_quantum-mechanics.pdf"
+				const base = file.name.replace(/\.pdf$/i, '');
+				const parts = base.split('_');
+				if (parts.length < 3) {
+					// fallback if format isn't correct
+					await addItem(SUPABASE_TABLE_READING, file.name);
+					continue;
+				}
 
-        // Handle multiple authors separated by "&"
-        const authorPart = parts[0];
-        const year = parts[1];
-        const titleRaw = parts.slice(2).join(' ');
+				// Handle multiple authors separated by "&"
+				const authorPart = parts[0];
+				const year = parts[1];
+				const titleRaw = parts.slice(2).join(' ');
 
-        // Split authors by "&" and capitalize each
-        const authors = authorPart.split('&').map(a => 
-            a.split(/[\s-]/)
-             .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-             .join(' ')
-        ).join(' & ');
+				// Split authors by "&" and capitalize each
+				const authors = authorPart.split('&').map(a => 
+					a.split(/[\s-]/)
+					 .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+					 .join(' ')
+				).join(' & ');
 
-        // Format title nicely
-        const title = titleRaw
-            .replace(/[-_]+/g, ' ')
-            .replace(/\b\w/g, c => c.toUpperCase());
+				// Format title nicely
+				const title = titleRaw
+					.replace(/[-_]+/g, ' ')
+					.replace(/\b\w/g, c => c.toUpperCase());
 
-        const formatted = `${authors} (${year}): *${title}*`;
-        await addItem(SUPABASE_TABLE_READING, formatted);
-    }
-});
+				const formatted = `${authors} (${year}): *${title}*`;
+				await addItem(SUPABASE_TABLE_READING, formatted);
+			}
+		});
 
         window.onload = initializeSupabase;
         Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
