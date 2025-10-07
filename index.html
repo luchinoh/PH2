@@ -382,6 +382,8 @@ expandedTodoParents = new Set(Array.from(openContainers).map(c => c.dataset.pare
                     );
 
                     const results = await Promise.all(updatePromises);
+console.log('Order updates:', updates);
+console.log('Supabase results:', results);
 const anyError = results.some(r => r.error);
 if (anyError) {
     console.error('Supabase reorder error:', results);
