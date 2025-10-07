@@ -62,7 +62,7 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         const SUPABASE_URL = "https://phpmhqfdbcbpidkohmdx.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBocG1ocWZkYmNicGlka29obWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTAzOTksImV4cCI6MjA3NDk4NjM5OX0.taS3tmL_OhJ2ubtCthp2HfLV6-1HvfjuU32aekK_kdQ";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzIıNiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBocG1ocWZkYmNicGlka29obWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTAzOTksImV4cCI6MjA3NDk4NjM5OX0.taS3tmL_OhJ2ubtCthp2HfLV6-1HvfjuU32aekK_kdQ";
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos'; 
 
@@ -348,7 +348,7 @@
         }
 
         // 🔻 BUG FIX START 🔻
-        // This function is fully replaced to handle UUIDs correctly.
+        // This function is fully replaced to fix the RLS error.
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -366,27 +366,20 @@
             const indicator = dropContainer.querySelector('.drag-over-indicator');
             if (indicator) {
                 dropContainer.insertBefore(draggedItem, indicator);
-
                 const tableName = draggedItem.dataset.table;
 
+                // **FIX 1**: The filter now correctly handles UUIDs by not trying to parse them as integers.
                 const listItems = Array.from(dropContainer.children)
-                    .filter(el => el.dataset.id && !isNaN(parseInt(el.dataset.id, 10)));
+                    .filter(el => el.dataset.id);
 
-                const updates = listItems
-                    .map((item, index) => {
-                        // **THE FIX**: Check the table name. For 'todos', use the ID as a string (UUID).
-                        // For other tables (like 'reading_list'), parse it as an integer.
-                        const id = tableName === SUPABASE_TABLE_TODOS 
-                            ? item.dataset.id 
-                            : parseInt(item.dataset.id, 10);
-                        
-                        return {
-                            id: id,
-                            order: index + 1
-                        };
-                    });
+                const updates = listItems.map((item, index) => {
+                    const id = (tableName === SUPABASE_TABLE_TODOS)
+                        ? item.dataset.id
+                        : parseInt(item.dataset.id, 10);
+                    
+                    return { id, order: index + 1 };
+                });
 
-                // Filter out any potential duplicates or bad data as a safeguard.
                 const seen = new Set();
                 const cleanUpdates = updates.filter(item => {
                     if (seen.has(item.id)) return false;
@@ -395,10 +388,20 @@
                 });
 
                 if (cleanUpdates.length > 0) {
-                    const { error } = await supabase.from(tableName).upsert(cleanUpdates);
+                    // **FIX 2**: Reverted from `upsert` to the original `Promise.all` of `update` calls.
+                    // This ensures we only ever update items, avoiding RLS INSERT policy violations.
+                    const updatePromises = cleanUpdates.map(item =>
+                        supabase
+                            .from(tableName)
+                            .update({ order: item.order })
+                            .eq('id', item.id)
+                    );
+                    
+                    const results = await Promise.all(updatePromises);
+                    const anyError = results.some(r => r.error);
 
-                    if (error) {
-                        console.error('Supabase reorder error:', error);
+                    if (anyError) {
+                        console.error('Supabase reorder error:', results.find(r => r.error)?.error);
                         showModal("Failed to save new order.");
                         fetchAndRenderList(tableName);
                     } else {
@@ -413,7 +416,6 @@
             handleDragEnd();
         }
         // 🔺 BUG FIX END 🔺
-
 
         ['dragover'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
