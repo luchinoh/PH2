@@ -62,7 +62,10 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         const SUPABASE_URL = "https://phpmhqfdbcbpidkohmdx.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzIıNiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBocG1ocWZkYmNicGlka29obWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTAzOTksImV4cCI6MjA3NDk4NjM5OX0.taS3tmL_OhJ2ubtCthp2HfLV6-1HvfjuU32aekK_kdQ";
+        // 🔻 BUG FIX START 🔻
+        // Restored the original, correct API key.
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBocG1ocWZkYmNicGlka29obWR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0MTAzOTksImV4cCI6MjA3NDk4NjM5OX0.taS3tmL_OhJ2ubtCthp2HfLV6-1HvfjuU32aekK_kdQ";
+        // 🔺 BUG FIX END 🔺
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos'; 
 
@@ -347,8 +350,6 @@
             else container.insertBefore(indicator, target.nextSibling);
         }
 
-        // 🔻 BUG FIX START 🔻
-        // This function is fully replaced to fix the RLS error.
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -368,7 +369,6 @@
                 dropContainer.insertBefore(draggedItem, indicator);
                 const tableName = draggedItem.dataset.table;
 
-                // **FIX 1**: The filter now correctly handles UUIDs by not trying to parse them as integers.
                 const listItems = Array.from(dropContainer.children)
                     .filter(el => el.dataset.id);
 
@@ -388,8 +388,6 @@
                 });
 
                 if (cleanUpdates.length > 0) {
-                    // **FIX 2**: Reverted from `upsert` to the original `Promise.all` of `update` calls.
-                    // This ensures we only ever update items, avoiding RLS INSERT policy violations.
                     const updatePromises = cleanUpdates.map(item =>
                         supabase
                             .from(tableName)
@@ -415,7 +413,6 @@
             }
             handleDragEnd();
         }
-        // 🔺 BUG FIX END 🔺
 
         ['dragover'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
