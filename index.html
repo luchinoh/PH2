@@ -70,6 +70,7 @@
         let userId = null; 
         let readingList = []; 
         let todoList = []; 
+        let expandedTodoParents = new Set();
 
         const readingListElement = document.getElementById('reading-list');
         const todoListElement = document.getElementById('todo-list');
@@ -137,6 +138,8 @@
         }
         
         function renderTodoList() {
+const openContainers = document.querySelectorAll('.subtask-container:not(.hidden)');
+expandedTodoParents = new Set(Array.from(openContainers).map(c => c.dataset.parentId));
             todoListElement.innerHTML = '';
             if (todoList.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">You have no tasks!</p>`; return; }
 
@@ -160,6 +163,14 @@
                 todoListElement.appendChild(mainLi);
                 todoListElement.appendChild(subtaskContainer);
             });
+            expandedTodoParents.forEach(id => {
+    const container = document.querySelector(`.subtask-container[data-parent-id="${id}"]`);
+    if (container) {
+        container.classList.remove('hidden');
+        const toggleIcon = container.previousElementSibling?.querySelector('.subtask-toggle-btn svg');
+        if (toggleIcon) toggleIcon.classList.add('rotate-90');
+    }
+});
         }
 
         function createItemElement(item, tableName, isSubtask, childCount = 0) {
@@ -235,42 +246,58 @@
         }
 
         function showAddSubtaskInput(parentId) {
-            const existingInput = document.getElementById('temp-subtask-input-container');
-            if (existingInput) existingInput.remove();
-            
-            const container = document.querySelector(`[data-parent-id="${parentId}"]`);
-            if (!container) return;
+    const existingInput = document.getElementById('temp-subtask-input-container');
+    if (existingInput) existingInput.remove();
+    
+    const container = document.querySelector(`[data-parent-id="${parentId}"]`);
+    if (!container) return;
 
-            container.classList.remove('hidden');
-            const parentLi = container.previousElementSibling;
-            if (parentLi) {
-                const toggleIcon = parentLi.querySelector('.subtask-toggle-btn svg');
-                if (toggleIcon) {
-                    toggleIcon.classList.add('rotate-90');
-                }
-            }
+    container.classList.remove('hidden');
+    const parentLi = container.previousElementSibling;
+    if (parentLi) {
+        const toggleIcon = parentLi.querySelector('.subtask-toggle-btn svg');
+        if (toggleIcon) toggleIcon.classList.add('rotate-90');
+    }
 
-            const inputContainer = document.createElement('div');
-            inputContainer.id = 'temp-subtask-input-container';
-            inputContainer.className = 'p-2 flex items-center space-x-2';
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.placeholder = 'Add new sub-task...';
-            input.className = 'flex-grow p-2 border rounded-lg text-poppins text-sm';
-            const saveButton = document.createElement('button');
-            saveButton.textContent = 'Save';
-            saveButton.className = 'text-poppins text-sm font-semibold bg-primary-blue text-white rounded-lg px-3 py-2';
-            saveButton.onclick = () => { if (input.value.trim()) { addItem(SUPABASE_TABLE_TODOS, input.value, parentId); inputContainer.remove(); } };
-            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveButton.click(); if (e.key === 'Escape') inputContainer.remove(); });
-            inputContainer.append(input, saveButton);
-            container.appendChild(inputContainer);
-            input.focus();
+    const inputContainer = document.createElement('div');
+    inputContainer.id = 'temp-subtask-input-container';
+    inputContainer.className = 'p-2 flex items-center space-x-2';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Add new sub-task...';
+    input.className = 'flex-grow p-2 border rounded-lg text-poppins text-sm';
+
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Save';
+    saveButton.className = 'text-poppins text-sm font-semibold bg-primary-blue text-white rounded-lg px-3 py-2';
+
+    const saveAndCleanup = async () => {
+        if (input.value.trim()) {
+            input.disabled = true;
+            saveButton.disabled = true;
+            await addItem(SUPABASE_TABLE_TODOS, input.value, parentId);
         }
+        inputContainer.remove(); // always remove cleanly
+    };
+
+    saveButton.onclick = saveAndCleanup;
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') saveAndCleanup();
+        if (e.key === 'Escape') inputContainer.remove();
+    });
+
+    inputContainer.append(input, saveButton);
+    container.appendChild(inputContainer);
+    input.focus();
+}
 
         async function addItem(tableName, text, parentId = null) {
             if (!userId || !text.trim()) return;
             const currentList = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
-            const itemsToOrder = parentId ? currentList.filter(i => i.parent_id === parentId) : currentList.filter(i => !i.parent_id);
+            const itemsToOrder = currentList.filter(i => 
+    (parentId ? i.parent_id === parentId : (i.parent_id === null || i.parent_id === undefined))
+);
             const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
             const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder };
             if (tableName === SUPABASE_TABLE_TODOS) itemToAdd.parent_id = parentId;
@@ -354,19 +381,20 @@
                             .eq('id', item.id)
                     );
 
-                    const { error } = await Promise.all(updatePromises);
-                    
-                    if (error) { 
-                        console.error('Supabase error:', error); 
-                        showModal("Failed to save new order.");
-                        fetchAndRenderList(tableName);
-                    } else {
-                        const listToUpdate = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-                        updates.forEach(update => {
-                            const item = listToUpdate.find(i => i.id == update.id);
-                            if (item) item.order = update.order;
-                        });
-                    }
+                    const results = await Promise.all(updatePromises);
+const anyError = results.some(r => r.error);
+if (anyError) {
+    console.error('Supabase reorder error:', results);
+    showModal("Failed to save new order.");
+    fetchAndRenderList(tableName);
+} else {
+    const listToUpdate = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
+    updates.forEach(update => {
+        const item = listToUpdate.find(i => i.id == update.id);
+        if (item) item.order = update.order;
+    });
+}
+
                 }
             }
             handleDragEnd();
