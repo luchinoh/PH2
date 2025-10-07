@@ -365,13 +365,22 @@ expandedTodoParents = new Set(Array.from(openContainers).map(c => c.dataset.pare
             if (indicator) {
                 dropContainer.insertBefore(draggedItem, indicator);
                 
-                const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id);
                 const tableName = draggedItem.dataset.table;
-                
-                const updates = listItems.map((item, index) => ({ 
-                    id: parseInt(item.dataset.id, 10), 
-                    order: index + 1 
-                }));
+
+const listItems = Array.from(dropContainer.children)
+  .filter(el => el.dataset.id && !isNaN(parseInt(el.dataset.id, 10)));
+
+const seen = new Set();
+const updates = listItems
+  .map((item, index) => ({
+      id: parseInt(item.dataset.id, 10),
+      order: index + 1
+  }))
+  .filter(item => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return Number.isInteger(item.id) && item.id > 0;
+  });
                 
                 if (updates.length > 0) {
                     const updatePromises = updates.map(item => 
