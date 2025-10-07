@@ -397,6 +397,66 @@
         function showModal(message) { document.getElementById('modal-text').textContent = message; document.getElementById('message-area').style.display = 'flex'; }
         function closeModal() { document.getElementById('message-area').style.display = 'none'; }
 
+// --- Drag & Drop PDF-to-ReadingList feature (supports multi-authors) ---
+const readingListDropZone = document.getElementById('reading-column');
+
+// Visual feedback when dragging files over
+['dragenter', 'dragover'].forEach(evt => {
+    readingListDropZone.addEventListener(evt, e => {
+        e.preventDefault();
+        if (e.dataTransfer?.types?.includes('Files')) {
+            readingListDropZone.classList.add('file-drag-active');
+        }
+    });
+});
+
+['dragleave', 'drop'].forEach(evt => {
+    readingListDropZone.addEventListener(evt, e => {
+        e.preventDefault();
+        readingListDropZone.classList.remove('file-drag-active');
+    });
+});
+
+// Handle dropped PDFs
+readingListDropZone.addEventListener('drop', async e => {
+    e.preventDefault();
+    if (!userId) return showModal('Please log in to add to your reading list.');
+
+    const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    if (files.length === 0) return;
+
+    for (const file of files) {
+        // Example: "smith&jones_2020_quantum-mechanics.pdf"
+        const base = file.name.replace(/\.pdf$/i, '');
+        const parts = base.split('_');
+        if (parts.length < 3) {
+            // fallback if format isn't correct
+            await addItem(SUPABASE_TABLE_READING, file.name);
+            continue;
+        }
+
+        // Handle multiple authors separated by "&"
+        const authorPart = parts[0];
+        const year = parts[1];
+        const titleRaw = parts.slice(2).join(' ');
+
+        // Split authors by "&" and capitalize each
+        const authors = authorPart.split('&').map(a => 
+            a.split(/[\s-]/)
+             .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+             .join(' ')
+        ).join(' & ');
+
+        // Format title nicely
+        const title = titleRaw
+            .replace(/[-_]+/g, ' ')
+            .replace(/\b\w/g, c => c.toUpperCase());
+
+        const formatted = `${authors} (${year}): *${title}*`;
+        await addItem(SUPABASE_TABLE_READING, formatted);
+    }
+});
+
         window.onload = initializeSupabase;
         Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
         
