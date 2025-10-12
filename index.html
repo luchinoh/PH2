@@ -40,19 +40,40 @@
     <div id="app" class="max-w-7xl mx-auto w-full p-0">
         <h1 class="text-4xl sm:text-5xl font-garamond font-bold mb-8 text-center border-b pb-4 px-4 sm:px-6">Productivity Hub</h1>
         <div id="loading" class="flex justify-center items-center py-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-blue"></div><p class="ml-3 text-poppins">Connecting...</p></div>
+        
+        <!-- MODIFIED: Changed to a 2-column layout with stacked to-do lists -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:p-6">
+            
+            <!-- Left Column: Reading List -->
             <div id="reading-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
                 <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Reading List</h2>
-                <div id="reading-list" class="list-container flex-grow max-h-[60vh] overflow-y-auto space-y-2 mb-4 p-2 border-b"></div>
+                <div id="reading-list" class="list-container flex-grow max-h-[80vh] overflow-y-auto space-y-2 mb-4 p-2 border-b"></div>
                 <div class="h-[1.75rem] mb-4 mt-auto"></div>
                 <form id="add-reading-form" class="flex space-x-2 pt-4"><input type="text" id="new-reading-text" placeholder="Add..." class="flex-grow p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue text-poppins"><button type="submit" class="text-poppins font-semibold bg-primary-blue text-white rounded-lg px-4 py-3 shadow-md hover:bg-blue-600 transition">Add Text</button></form>
             </div>
-            <div id="todo-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
-                <h2 class="text-3xl font-garamond font-bold mb-4 text-center">To-Do List</h2>
-                <div id="todo-list" class="list-container flex-grow max-h-[60vh] overflow-y-auto space-y-2 mb-4 p-2 border-b"></div>
-                <div class="h-[1.75rem] mb-4 mt-auto"></div>
-                <form id="add-todo-form" class="flex space-x-2 pt-4"><input type="text" id="new-todo-text" placeholder="Add..." class="flex-grow p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-green text-poppins"><button type="submit" class="text-poppins font-semibold bg-primary-green text-white rounded-lg px-4 py-3 shadow-md hover:bg-green-600 transition">Add Task</button></form>
+
+            <!-- Right Column Wrapper -->
+            <div class="flex flex-col gap-4">
+
+                <!-- Top-Right: Task Inbox -->
+                <div id="todo-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
+                    <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Task Inbox</h2>
+                    <div id="todo-list" class="list-container flex-grow max-h-[35vh] overflow-y-auto space-y-2 mb-4 p-2 border-b"></div>
+                    <div class="h-[1.75rem] mb-4 mt-auto"></div>
+                    <form id="add-todo-form" class="flex space-x-2 pt-4"><input type="text" id="new-todo-text" placeholder="Add..." class="flex-grow p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-green text-poppins"><button type="submit" class="text-poppins font-semibold bg-primary-green text-white rounded-lg px-4 py-3 shadow-md hover:bg-green-600 transition">Add Task</button></form>
+                </div>
+
+                <!-- Bottom-Right: Daily Focus -->
+                <div id="daily-focus-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col border-2 border-primary-blue">
+                    <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Daily Focus</h2>
+                    <div id="daily-focus-list" class="list-container flex-grow max-h-[35vh] overflow-y-auto space-y-2 mb-4 p-2 border-b">
+                        <!-- Daily tasks will be rendered here -->
+                    </div>
+                    <div class="h-[1.75rem] mb-4 mt-auto"></div>
+                    <p class="text-center text-sm text-poppins text-gray-500 pt-4">Drag tasks from the Inbox here to plan your day.</p>
+                </div>
             </div>
+
         </div>
     </div>
     <div id="message-area" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" style="display: none;"><div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center text-poppins"><p class="font-semibold mb-4" id="modal-text"></p><button onclick="closeModal()" class="bg-primary-blue text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition">OK</button></div></div>
@@ -61,34 +82,31 @@
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-        const SUPABASE_URL = "https://uqaxcejfjargwoyvaein.supabase.co"; 
-        // 🔻 BUG FIX START 🔻
-        // Restored the original, correct API key.
+        // Using your dev Supabase credentials for this preview
+        const SUPABASE_URL = "https://uqaxcejfjargwoyvaein.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA";
-        // 🔺 BUG FIX END 🔺
         const SUPABASE_TABLE_READING = 'reading_list';
-        const SUPABASE_TABLE_TODOS = 'todos'; 
+        const SUPABASE_TABLE_TODOS = 'todos';
 
         let supabase = null;
-        let userId = null; 
-        let readingList = []; 
-        let todoList = []; 
+        let userId = null;
+        let readingList = [];
+        let todoList = [];
         let expandedTodoParents = new Set();
 
         const readingListElement = document.getElementById('reading-list');
         const todoListElement = document.getElementById('todo-list');
+        const dailyFocusListElement = document.getElementById('daily-focus-list');
         const loadingElement = document.getElementById('loading');
         
         async function initializeSupabase() {
             loadingElement.style.display = 'flex';
             supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            
             supabase.auth.onAuthStateChange((_, session) => {
                 const wasLoggedIn = !!userId;
                 userId = session?.user?.id || null;
                 updateAuthButton(!userId, session?.user?.email);
                 updateFormState(!!userId);
-
                 if (!!userId && !wasLoggedIn) {
                     setupRealtimeListener(SUPABASE_TABLE_READING);
                     setupRealtimeListener(SUPABASE_TABLE_TODOS);
@@ -100,26 +118,20 @@
                 }
             });
         }
-        
         async function fetchAndRenderList(tableName) {
             if (!userId) { loadingElement.style.display = 'none'; renderAllLists(); return; }
-            
             const { data, error } = await supabase.from(tableName).select('*').eq('user_id', userId);
             if (error) { showModal(`Could not load ${tableName}. Check RLS policies.`); loadingElement.style.display = 'none'; return; }
-
             if (tableName === SUPABASE_TABLE_READING) readingList = data;
             else todoList = data;
-            
             renderAllLists();
             loadingElement.style.display = 'none';
         }
-        
         function setupRealtimeListener(tableName) {
-            if (!userId) return; 
+            if (!userId) return;
             const channelId = `changes-${tableName}-${userId}`;
             let channel = supabase.getChannels().find(c => c.topic.includes(channelId));
             if (channel) return;
-            
             supabase.channel(channelId).on('postgres_changes', 
                 { event: '*', schema: 'public', table: tableName, filter: `user_id=eq.${userId}` },
                 () => fetchAndRenderList(tableName)
@@ -127,7 +139,7 @@
                 if (status === 'SUBSCRIBED') fetchAndRenderList(tableName);
             });
         }
-        
+
         function renderAllLists() {
             renderReadingList();
             renderTodoList();
@@ -141,39 +153,65 @@
         }
         
         function renderTodoList() {
-			const openContainers = document.querySelectorAll('.subtask-container:not(.hidden)');
-			expandedTodoParents = new Set(Array.from(openContainers).map(c => c.dataset.parentId));
-            todoListElement.innerHTML = '';
-            if (todoList.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">You have no tasks!</p>`; return; }
-
-            const todoMap = new Map();
-            todoList.forEach(item => { if (!item.parent_id) todoMap.set(item.id, { ...item, children: [] }); });
-            todoList.forEach(item => { if (item.parent_id) todoMap.get(item.parent_id)?.children.push(item); });
-
-            const sortedTopLevel = [...todoMap.values()].sort((a,b) => a.completed - b.completed || a.order - b.order);
+            const openContainers = document.querySelectorAll('.subtask-container:not(.hidden)');
+            expandedTodoParents = new Set(Array.from(openContainers).map(c => c.dataset.parentId));
             
-            sortedTopLevel.forEach(mainTodo => {
-                const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, mainTodo.children.length);
-                const subtaskContainer = document.createElement('div');
-                
-                subtaskContainer.className = 'mt-1 space-y-1 subtask-container hidden';
-                subtaskContainer.dataset.parentId = mainTodo.id;
+            todoListElement.innerHTML = '';
+            dailyFocusListElement.innerHTML = '';
 
-                mainTodo.children.sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
-                    subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
-                });
-                
-                todoListElement.appendChild(mainLi);
-                todoListElement.appendChild(subtaskContainer);
+            const inboxTodos = todoList.filter(item => !item.is_daily);
+            const dailyTodos = todoList.filter(item => item.is_daily);
+
+            if (inboxTodos.length === 0 && dailyTodos.length === 0 && userId) {
+                todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">You have no tasks!</p>`;
+                dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">Drag tasks here for today.</p>`;
+                return;
+            }
+             if (inboxTodos.length === 0 && userId) {
+                 todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">Inbox is clear!</p>`;
+             }
+             if (dailyTodos.length === 0 && userId) {
+                 dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">Drag tasks here for today.</p>`;
+             }
+
+            const inboxMap = new Map();
+            inboxTodos.forEach(item => { if (!item.parent_id) inboxMap.set(item.id, { ...item, children: [] }); });
+            inboxTodos.forEach(item => { if (item.parent_id) inboxMap.get(item.parent_id)?.children.push(item); });
+            const sortedInbox = [...inboxMap.values()].sort((a,b) => a.completed - b.completed || a.order - b.order);
+            sortedInbox.forEach(mainTodo => {
+                const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, mainTodo.children.length);
+                const subtaskContainer = createSubtaskContainer(mainTodo);
+                todoListElement.append(mainLi, subtaskContainer);
             });
+            
+            const dailyMap = new Map();
+            dailyTodos.forEach(item => { if (!item.parent_id) dailyMap.set(item.id, { ...item, children: [] }); });
+            dailyTodos.forEach(item => { if (item.parent_id) dailyMap.get(item.parent_id)?.children.push(item); });
+            const sortedDaily = [...dailyMap.values()].sort((a,b) => a.completed - b.completed || a.order - b.order);
+            sortedDaily.forEach(mainTodo => {
+                const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, mainTodo.children.length);
+                const subtaskContainer = createSubtaskContainer(mainTodo);
+                dailyFocusListElement.append(mainLi, subtaskContainer);
+            });
+
             expandedTodoParents.forEach(id => {
-				const container = document.querySelector(`.subtask-container[data-parent-id="${id}"]`);
-				if (container) {
-					container.classList.remove('hidden');
-					const toggleIcon = container.previousElementSibling?.querySelector('.subtask-toggle-btn svg');
-					if (toggleIcon) toggleIcon.classList.add('rotate-90');
-				}
-			});
+                const container = document.querySelector(`.subtask-container[data-parent-id="${id}"]`);
+                if (container) {
+                    container.classList.remove('hidden');
+                    const toggleIcon = container.previousElementSibling?.querySelector('.subtask-toggle-btn svg');
+                    if (toggleIcon) toggleIcon.classList.add('rotate-90');
+                }
+            });
+        }
+
+        function createSubtaskContainer(mainTodo) {
+            const subtaskContainer = document.createElement('div');
+            subtaskContainer.className = 'mt-1 space-y-1 subtask-container hidden';
+            subtaskContainer.dataset.parentId = mainTodo.id;
+            mainTodo.children.sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
+                subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
+            });
+            return subtaskContainer;
         }
 
         function createItemElement(item, tableName, isSubtask, childCount = 0) {
@@ -183,7 +221,6 @@
             li.dataset.table = tableName;
             li.dataset.order = item.order;
             li.setAttribute('draggable', !item.completed);
-            
             let classes = `flex items-center rounded-xl border border-gray-200 transition-shadow duration-300`;
             if (isSubtask) {
                 classes += ` p-2 bg-white`;
@@ -194,17 +231,14 @@
             }
             if (item.completed) classes += ` opacity-50`;
             li.className = classes;
-
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragend', handleDragEnd);
             li.addEventListener('dragenter', handleDragEnter);
             li.addEventListener('dragleave', handleDragLeave);
-            
             if (!isSubtask && childCount > 0) {
                 const toggleButton = document.createElement('button');
                 toggleButton.className = 'mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
                 toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
-                
                 toggleButton.onclick = function() {
                     const parentElement = this.closest('[data-id]');
                     const subtaskContainer = parentElement.nextElementSibling;
@@ -215,28 +249,22 @@
                 };
                 li.appendChild(toggleButton);
             }
-
             const isReading = tableName === SUPABASE_TABLE_READING;
             const primaryColor = isReading ? 'primary-blue' : 'primary-green';
-
             const toggleButton = document.createElement('button');
             const sizeClasses = isSubtask ? 'h-5 w-5' : 'h-6 w-6';
             toggleButton.className = `mr-3 flex-shrink-0 ${sizeClasses} flex items-center justify-center rounded-full transition-colors ${item.completed ? `text-white bg-${primaryColor}` : `text-gray-400 border-2 border-gray-300 hover:border-${primaryColor}`}`;
             toggleButton.innerHTML = item.completed ? `<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7" /></svg>` : ``;
             toggleButton.onclick = () => toggleCompleted(tableName, item.id, !item.completed);
-
             const textSpan = document.createElement('span');
             textSpan.className = `flex-grow ${isSubtask ? 'text-base' : (isReading ? 'text-lg' : 'text-xl')} font-garamond ${item.completed ? 'line-through text-gray-500' : ''}`;
             if (isReading) textSpan.innerHTML = item.text.replace(/\*(.*?)\*/g, '<em>$1</em>');
             else textSpan.textContent = item.text;
-
             const deleteButton = document.createElement('button');
             deleteButton.className = 'ml-auto flex-shrink-0 p-2 h-7 w-7 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-gray-100 transition';
             deleteButton.innerHTML = `<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" /></svg>`;
             deleteButton.onclick = () => deleteItem(tableName, item.id);
-
             li.append(toggleButton, textSpan);
-
             if (!isSubtask && !isReading && !item.completed) {
                 const addSubtaskButton = document.createElement('button');
                 addSubtaskButton.className = 'ml-2 flex-shrink-0 p-2 h-8 w-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-500 hover:bg-gray-100 transition';
@@ -247,63 +275,55 @@
             li.append(deleteButton);
             return li;
         }
-
         function showAddSubtaskInput(parentId) {
-			const existingInput = document.getElementById('temp-subtask-input-container');
-			if (existingInput) existingInput.remove();
-			
-			const container = document.querySelector(`[data-parent-id="${parentId}"]`);
-			if (!container) return;
-
-			container.classList.remove('hidden');
-			const parentLi = container.previousElementSibling;
-			if (parentLi) {
-				const toggleIcon = parentLi.querySelector('.subtask-toggle-btn svg');
-				if (toggleIcon) toggleIcon.classList.add('rotate-90');
-			}
-
-			const inputContainer = document.createElement('div');
-			inputContainer.id = 'temp-subtask-input-container';
-			inputContainer.className = 'p-2 flex items-center space-x-2';
-
-			const input = document.createElement('input');
-			input.type = 'text';
-			input.placeholder = 'Add new sub-task...';
-			input.className = 'flex-grow p-2 border rounded-lg text-poppins text-sm';
-
-			const saveButton = document.createElement('button');
-			saveButton.textContent = 'Save';
-			saveButton.className = 'text-poppins text-sm font-semibold bg-primary-blue text-white rounded-lg px-3 py-2';
-
-			const saveAndCleanup = async () => {
-				if (input.value.trim()) {
-					input.disabled = true;
-					saveButton.disabled = true;
-					await addItem(SUPABASE_TABLE_TODOS, input.value, parentId);
-				}
-				inputContainer.remove(); // always remove cleanly
-			};
-
-			saveButton.onclick = saveAndCleanup;
-			input.addEventListener('keydown', e => {
-				if (e.key === 'Enter') saveAndCleanup();
-				if (e.key === 'Escape') inputContainer.remove();
-			});
-
-			inputContainer.append(input, saveButton);
-			container.appendChild(inputContainer);
-			input.focus();
-		}
+            const existingInput = document.getElementById('temp-subtask-input-container');
+            if (existingInput) existingInput.remove();
+            const container = document.querySelector(`[data-parent-id="${parentId}"]`);
+            if (!container) return;
+            container.classList.remove('hidden');
+            const parentLi = container.previousElementSibling;
+            if (parentLi) {
+                const toggleIcon = parentLi.querySelector('.subtask-toggle-btn svg');
+                if (toggleIcon) toggleIcon.classList.add('rotate-90');
+            }
+            const inputContainer = document.createElement('div');
+            inputContainer.id = 'temp-subtask-input-container';
+            inputContainer.className = 'p-2 flex items-center space-x-2';
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'Add new sub-task...';
+            input.className = 'flex-grow p-2 border rounded-lg text-poppins text-sm';
+            const saveButton = document.createElement('button');
+            saveButton.textContent = 'Save';
+            saveButton.className = 'text-poppins text-sm font-semibold bg-primary-blue text-white rounded-lg px-3 py-2';
+            const saveAndCleanup = async () => {
+                if (input.value.trim()) {
+                    input.disabled = true;
+                    saveButton.disabled = true;
+                    await addItem(SUPABASE_TABLE_TODOS, input.value, parentId);
+                }
+                inputContainer.remove();
+            };
+            saveButton.onclick = saveAndCleanup;
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Enter') saveAndCleanup();
+                if (e.key === 'Escape') inputContainer.remove();
+            });
+            inputContainer.append(input, saveButton);
+            container.appendChild(inputContainer);
+            input.focus();
+        }
 
         async function addItem(tableName, text, parentId = null) {
             if (!userId || !text.trim()) return;
             const currentList = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
-            const itemsToOrder = currentList.filter(i => 
-				(parentId ? i.parent_id === parentId : (i.parent_id === null || i.parent_id === undefined))
-			);
+            const itemsToOrder = currentList.filter(i => (parentId ? i.parent_id === parentId : (i.parent_id === null || i.parent_id === undefined)));
             const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
             const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder };
-            if (tableName === SUPABASE_TABLE_TODOS) itemToAdd.parent_id = parentId;
+            if (tableName === SUPABASE_TABLE_TODOS) {
+                itemToAdd.parent_id = parentId;
+                if (!parentId) itemToAdd.is_daily = false;
+            }
             const { data: newData, error } = await supabase.from(tableName).insert(itemToAdd).select().single();
             if (error) { showModal(`Failed to add item. Check RLS policies.`); } 
             else { currentList.push(newData); renderAllLists(); if (!parentId) document.getElementById(`new-${tableName.split('_')[0]}-text`).value = ''; }
@@ -315,7 +335,6 @@
             if (error) { showModal("Failed to update status."); } 
             else { const item = (tableName === SUPABASE_TABLE_READING ? readingList : todoList).find(i => i.id === id); if (item) item.completed = status; renderAllLists(); }
         }
-
         async function deleteItem(tableName, id) {
             if (!userId) return;
             const { error } = await supabase.from(tableName).delete().eq('id', id);
@@ -331,37 +350,52 @@
             draggedItem = null;
         }
         function handleDragLeave(e) { }
-        
         function handleDragEnter(e) {
             e.preventDefault();
-            if (!draggedItem) return;
+            if (!draggedItem || draggedItem.dataset.isSubtask === 'true') return;
             const target = e.target.closest('[draggable="true"]');
-            if (!target || target === draggedItem) return;
-
-            const container = target.parentNode;
-            if (draggedItem.parentNode !== container) return;
             
-            const indicator = container.querySelector('.drag-over-indicator') || document.createElement('div');
+            const container = e.target.closest('.list-container');
+            if (!container) return;
+
+            if (draggedItem.dataset.table === SUPABASE_TABLE_TODOS && !['todo-list', 'daily-focus-list'].includes(container.id)) return;
+            if (draggedItem.dataset.table === SUPABASE_TABLE_READING && container.id !== 'reading-list') return;
+
+            const indicator = document.querySelector('.drag-over-indicator') || document.createElement('div');
             indicator.className = 'drag-over-indicator';
             indicator.style.borderColor = container.id.includes('todo') ? '#2ecc71' : '#3498db';
-            
-            const rect = target.getBoundingClientRect();
-            if (e.clientY - rect.top < rect.height / 2) container.insertBefore(indicator, target);
-            else container.insertBefore(indicator, target.nextSibling);
+
+            if (target && target.parentNode === container) {
+                 const rect = target.getBoundingClientRect();
+                 if (e.clientY - rect.top < rect.height / 2) container.insertBefore(indicator, target);
+                 else container.insertBefore(indicator, target.nextSibling);
+            } else {
+                 container.appendChild(indicator);
+            }
         }
 
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
 
-            const dropContainer = e.target.closest('.list-container, .subtask-container');
+            const dropContainer = e.target.closest('.list-container');
             if (!dropContainer) return handleDragEnd();
+            
+            if (draggedItem.dataset.isSubtask === 'true') return handleDragEnd();
 
-            const isDraggedSubtask = draggedItem.dataset.isSubtask === 'true';
-            const isDropOnSubtaskContainer = dropContainer.classList.contains('subtask-container');
+            let newIsDailyStatus = null;
+            if (draggedItem.dataset.table === SUPABASE_TABLE_TODOS) {
+                const isMovingToDaily = dropContainer.id === 'daily-focus-list';
+                const isMovingToInbox = dropContainer.id === 'todo-list';
+                const originalItem = todoList.find(t => t.id == draggedItem.dataset.id);
 
-            if (isDraggedSubtask !== isDropOnSubtaskContainer && dropContainer.id !== 'reading-list') {
-                return handleDragEnd();
+                if (isMovingToDaily && !originalItem.is_daily) {
+                    newIsDailyStatus = true;
+                } else if (isMovingToInbox && originalItem.is_daily) {
+                    newIsDailyStatus = false;
+                }
+            } else if (dropContainer.id !== 'reading-list') {
+                 return handleDragEnd();
             }
 
             const indicator = dropContainer.querySelector('.drag-over-indicator');
@@ -369,46 +403,28 @@
                 dropContainer.insertBefore(draggedItem, indicator);
                 const tableName = draggedItem.dataset.table;
 
-                const listItems = Array.from(dropContainer.children)
-                    .filter(el => el.dataset.id);
+                const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id);
+                const updates = listItems.map((item, index) => ({ id: item.dataset.id, order: index + 1 }));
 
-                const updates = listItems.map((item, index) => {
-                    const id = (tableName === SUPABASE_TABLE_TODOS)
-                        ? item.dataset.id
-                        : parseInt(item.dataset.id, 10);
-                    
-                    return { id, order: index + 1 };
-                });
+                const draggedUpdate = updates.find(u => u.id == draggedItem.dataset.id);
+                if (draggedUpdate && newIsDailyStatus !== null) {
+                    draggedUpdate.is_daily = newIsDailyStatus;
+                }
+                
+                const updatePromises = updates.map(item => supabase.from(tableName).update(item).eq('id', item.id));
+                
+                // If only the status changed without a reorder in the same list, add that promise.
+                if (newIsDailyStatus !== null && !draggedUpdate) {
+                    updatePromises.push(supabase.from(tableName).update({ is_daily: newIsDailyStatus, order: 1 }).eq('id', draggedItem.dataset.id));
+                }
 
-                const seen = new Set();
-                const cleanUpdates = updates.filter(item => {
-                    if (seen.has(item.id)) return false;
-                    seen.add(item.id);
-                    return item.id != null;
-                });
-
-                if (cleanUpdates.length > 0) {
-                    const updatePromises = cleanUpdates.map(item =>
-                        supabase
-                            .from(tableName)
-                            .update({ order: item.order })
-                            .eq('id', item.id)
-                    );
-                    
-                    const results = await Promise.all(updatePromises);
-                    const anyError = results.some(r => r.error);
-
-                    if (anyError) {
-                        console.error('Supabase reorder error:', results.find(r => r.error)?.error);
-                        showModal("Failed to save new order.");
-                        fetchAndRenderList(tableName);
-                    } else {
-                        const listToUpdate = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-                        cleanUpdates.forEach(update => {
-                            const item = listToUpdate.find(i => i.id == update.id);
-                            if (item) item.order = update.order;
-                        });
-                    }
+                const results = await Promise.all(updatePromises);
+                if (results.some(r => r.error)) {
+                    showModal("Failed to save changes.");
+                    fetchAndRenderList(tableName);
+                } else {
+                    // This will trigger a full re-render from the latest data
+                    fetchAndRenderList(tableName);
                 }
             }
             handleDragEnd();
@@ -416,14 +432,13 @@
 
         ['dragover'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
-        
         function updateAuthButton(isLoggedOut, email) {
             const btn = document.getElementById('auth-toggle-btn');
             btn.textContent = isLoggedOut ? 'Login' : `Logged in as ${email}`;
             btn.onclick = isLoggedOut ? openAuthModal : handleLogout;
         }
         function updateFormState(isLoggedIn) {
-            ['new-reading-text', 'add-reading-form button', 'new-todo-text', 'add-todo-form button'].forEach(sel => document.querySelector(`#${sel}`).disabled = !isLoggedIn);
+            document.querySelectorAll('#add-reading-form input, #add-reading-form button, #add-todo-form input, #add-todo-form button').forEach(el => el.disabled = !isLoggedIn);
             document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Author (Year): *Title*" : "Please log in";
             document.getElementById('new-todo-text').placeholder = isLoggedIn ? "Buy milk, etc." : "Please log in";
         }
@@ -438,70 +453,39 @@
         function closeAuthModal() { document.getElementById('auth-modal').style.display = 'none'; }
         function showModal(message) { document.getElementById('modal-text').textContent = message; document.getElementById('message-area').style.display = 'flex'; }
         function closeModal() { document.getElementById('message-area').style.display = 'none'; }
-
-		// --- Drag & Drop PDF-to-ReadingList feature (supports multi-authors) ---
-		const readingListDropZone = document.getElementById('reading-column');
-
-		// Visual feedback when dragging files over
-		['dragenter', 'dragover'].forEach(evt => {
-			readingListDropZone.addEventListener(evt, e => {
-				e.preventDefault();
-				if (e.dataTransfer?.types?.includes('Files')) {
-					readingListDropZone.classList.add('file-drag-active');
-				}
-			});
-		});
-
-		['dragleave', 'drop'].forEach(evt => {
-			readingListDropZone.addEventListener(evt, e => {
-				e.preventDefault();
-				readingListDropZone.classList.remove('file-drag-active');
-			});
-		});
-
-		// Handle dropped PDFs
-		readingListDropZone.addEventListener('drop', async e => {
-			e.preventDefault();
-			if (!userId) return showModal('Please log in to add to your reading list.');
-
-			const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
-			if (files.length === 0) return;
-
-			for (const file of files) {
-				// Example: "smith&jones_2020_quantum-mechanics.pdf"
-				const base = file.name.replace(/\.pdf$/i, '');
-				const parts = base.split('_');
-				if (parts.length < 3) {
-					// fallback if format isn't correct
-					await addItem(SUPABASE_TABLE_READING, file.name);
-					continue;
-				}
-
-				// Handle multiple authors separated by "&"
-				const authorPart = parts[0];
-				const year = parts[1];
-				const titleRaw = parts.slice(2).join(' ');
-
-				// Split authors by "&" and capitalize each
-				const authors = authorPart.split('&').map(a => 
-					a.split(/[\s-]/)
-					 .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-					 .join(' ')
-				).join(' & ');
-
-				// Format title nicely
-				const title = titleRaw
-					.replace(/[-_]+/g, ' ')
-					.replace(/\b\w/g, c => c.toUpperCase());
-
-				const formatted = `${authors} (${year}): *${title}*`;
-				await addItem(SUPABASE_TABLE_READING, formatted);
-			}
-		});
-
+        const readingListDropZone = document.getElementById('reading-column');
+        ['dragenter', 'dragover'].forEach(evt => {
+            readingListDropZone.addEventListener(evt, e => {
+                e.preventDefault();
+                if (e.dataTransfer?.types?.includes('Files')) readingListDropZone.classList.add('file-drag-active');
+            });
+        });
+        ['dragleave', 'drop'].forEach(evt => {
+            readingListDropZone.addEventListener(evt, e => {
+                e.preventDefault();
+                readingListDropZone.classList.remove('file-drag-active');
+            });
+        });
+        readingListDropZone.addEventListener('drop', async e => {
+            e.preventDefault();
+            if (!userId) return showModal('Please log in to add to your reading list.');
+            const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+            if (files.length === 0) return;
+            for (const file of files) {
+                const base = file.name.replace(/\.pdf$/i, '');
+                const parts = base.split('_');
+                if (parts.length < 3) { await addItem(SUPABASE_TABLE_READING, file.name); continue; }
+                const authorPart = parts[0];
+                const year = parts[1];
+                const titleRaw = parts.slice(2).join(' ');
+                const authors = authorPart.split('&').map(a => a.split(/[\s-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')).join(' & ');
+                const title = titleRaw.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                const formatted = `${authors} (${year}): *${title}*`;
+                await addItem(SUPABASE_TABLE_READING, formatted);
+            }
+        });
         window.onload = initializeSupabase;
         Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
-        
         document.getElementById('add-reading-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_READING, document.getElementById('new-reading-text').value); });
         document.getElementById('add-todo-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_TODOS, document.getElementById('new-todo-text').value); });
     </script>
