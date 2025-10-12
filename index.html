@@ -13,8 +13,6 @@
         body { background-color: #F8F7F4; color: #2c3e50; font-family: 'Cormorant Garamond', serif; min-height: 100vh; }
         .text-poppins { font-family: 'Poppins', sans-serif; }
         .drag-source { opacity: 0.4; }
-        .list-container::-webkit-scrollbar { width: 8px; }
-        .list-container::-webkit-scrollbar-thumb { background-color: #bdc3c7; border-radius: 4px; }
         .drag-over-indicator { border-top: 2px solid #3498db; margin-top: -2px; height: 0; }
         .file-drag-active { box-shadow: 0 0 0 4px #3498db inset; }
         .subtask-container { padding-left: 2.5rem; }
@@ -42,11 +40,11 @@
         <h1 class="text-4xl sm:text-5xl font-garamond font-bold mb-8 text-center border-b pb-4 px-4 sm:px-6">Productivity Hub</h1>
         <div id="loading" class="flex justify-center items-center py-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-blue"></div><p class="ml-3 text-poppins">Connecting...</p></div>
         
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:p-6">
+        <!-- ✨ LAYOUT FIX: Added lg:items-start to make column heights independent -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:p-6 lg:items-start">
             
             <div id="reading-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
                 <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Reading List</h2>
-                <!-- ✨ CHANGE: Removed max-h-[80vh] and overflow-y-auto -->
                 <div id="reading-list" class="list-container flex-grow space-y-2 mb-4 p-2 border-b"></div>
                 <div class="h-[1.75rem] mb-4 mt-auto"></div>
                 <form id="add-reading-form" class="flex space-x-2 pt-4"><input type="text" id="new-reading-text" placeholder="Add..." class="flex-grow p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue text-poppins"><button type="submit" class="text-poppins font-semibold bg-primary-blue text-white rounded-lg px-4 py-3 shadow-md hover:bg-blue-600 transition">Add Text</button></form>
@@ -55,7 +53,6 @@
             <div class="flex flex-col gap-4">
                 <div id="daily-focus-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col border-2 border-primary-blue">
                     <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Daily Focus</h2>
-                    <!-- ✨ CHANGE: Removed max-h-[35vh] and overflow-y-auto -->
                     <div id="daily-focus-list" class="list-container flex-grow space-y-2 mb-4 p-2 border-b"></div>
                     <div class="h-[1.75rem] mb-4 mt-auto"></div>
                     <p class="text-center text-sm text-poppins text-gray-500 pt-4">Drag items here to plan your day.</p>
@@ -63,7 +60,6 @@
 
                 <div id="todo-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
                     <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Task Inbox</h2>
-                    <!-- ✨ CHANGE: Removed max-h-[35vh] and overflow-y-auto -->
                     <div id="todo-list" class="list-container flex-grow space-y-2 mb-4 p-2 border-b"></div>
                     <div class="h-[1.75rem] mb-4 mt-auto"></div>
                     <form id="add-todo-form" class="flex space-x-2 pt-4"><input type="text" id="new-todo-text" placeholder="Add..." class="flex-grow p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-green text-poppins"><button type="submit" class="text-poppins font-semibold bg-primary-green text-white rounded-lg px-4 py-3 shadow-md hover:bg-green-600 transition">Add Task</button></form>
@@ -397,7 +393,7 @@
 
             const draggedTable = draggedItem.dataset.table;
 
-            if (draggedTable === SUPABASE_READING && dropTarget.classList.contains('subtask-container')) {
+            if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
                 dropTarget.classList.add('subtask-drop-active');
                 return;
             }
@@ -418,6 +414,7 @@
             }
         }
 
+        // ✨ DRAG & DROP FIX: Rewritten to be simpler and more reliable
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -428,44 +425,51 @@
             const draggedTable = draggedItem.dataset.table;
             const draggedId = draggedItem.dataset.id;
 
-            if (draggedTable === SUPABASE_READING && dropTarget.classList.contains('subtask-container')) {
+            // SCENARIO 1: Create subtask from reading item
+            if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
                 const parentId = dropTarget.dataset.parentId;
                 const readingItem = readingList.find(i => i.id == draggedId);
                 if (readingItem && parentId) {
                     await addItem(SUPABASE_TABLE_TODOS, readingItem.text, parentId);
                 }
-                handleDragEnd();
-                return;
+                return handleDragEnd();
             }
 
+            // SCENARIO 2: Reorder or move between lists
             if (dropTarget.classList.contains('list-container')) {
                 const isMovingToDaily = dropTarget.id === 'daily-focus-list';
                 const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
                 const originalItem = listToCheck.find(i => i.id == draggedId);
                 const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
 
-                if (isMovingToDaily) originalItem.is_daily = true;
-                if (isLeavingDaily) originalItem.is_daily = false;
+                let statusUpdatePromise = null;
+                if (isMovingToDaily) {
+                    statusUpdatePromise = supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId);
+                } else if (isLeavingDaily) {
+                    statusUpdatePromise = supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId);
+                }
 
+                let reorderPromise = null;
                 const indicator = dropTarget.querySelector('.drag-over-indicator');
                 if (indicator) {
-                    const listItems = Array.from(dropTarget.children).filter(el => el.dataset.id && el !== draggedItem);
-                    listItems.splice(Array.from(indicator.parentNode.children).indexOf(indicator), 0, draggedItem);
-                    listItems.forEach((item, index) => {
-                        const list = item.dataset.table === SUPABASE_TABLE_READING ? readingList : todoList;
-                        const movedItem = list.find(i => i.id == item.dataset.id);
-                        if(movedItem) movedItem.order = index + 1;
-                    });
+                    const listItems = Array.from(dropTarget.children);
+                    const newIndex = listItems.indexOf(indicator);
+                    const updates = [];
+                    for(let i = 0; i < listItems.length; i++){
+                        const itemEl = listItems[i];
+                        if(itemEl.dataset.id) {
+                            updates.push({ id: itemEl.dataset.id, order: i });
+                        }
+                    }
+                    if (updates.length > 0) {
+                        reorderPromise = supabase.from(itemEl.dataset.table).upsert(updates);
+                    }
                 }
-                renderAllLists();
                 
-                if (isMovingToDaily) await supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId);
-                if (isLeavingDaily) await supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId);
-                if (indicator) {
-                    const updates = listToCheck.map(i => ({ id: i.id, order: i.order }));
-                    await supabase.from(draggedTable).upsert(updates);
-                }
+                await Promise.all([statusUpdatePromise, reorderPromise].filter(Boolean));
+                await fetchAndRenderAllLists(); // Always get fresh data after any drop
             }
+            
             handleDragEnd();
         }
 
