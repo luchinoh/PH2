@@ -412,7 +412,7 @@
             }
         }
 
-        // ✨ DRAG & DROP FIX V2: Rewritten to be simpler and more reliable
+        // ✨ DRAG & DROP FIX V3: Rewritten to be simple, robust, and reliable.
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -428,7 +428,7 @@
                 const parentId = dropTarget.dataset.parentId;
                 const readingItem = readingList.find(i => i.id == draggedId);
                 if (readingItem && parentId) {
-                    const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); // Remove italics
+                    const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
                     await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
                 }
                 return handleDragEnd();
@@ -451,6 +451,7 @@
                 let reorderPromise = null;
                 const indicator = dropTarget.querySelector('.drag-over-indicator');
                 if (indicator) {
+                    // Temporarily move the item in the DOM to calculate the correct new order
                     dropTarget.insertBefore(draggedItem, indicator);
                     
                     const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
@@ -472,7 +473,7 @@
                 }
                 
                 await Promise.all([statusUpdatePromise, reorderPromise].filter(Boolean));
-                await fetchAndRenderAllLists();
+                // We no longer call fetch here. We let the realtime listener handle it.
             }
             
             handleDragEnd();
@@ -511,4 +512,6 @@
     </script>
 </body>
 </html>
+
+
 
