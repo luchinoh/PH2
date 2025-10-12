@@ -54,22 +54,22 @@
             <!-- Right Column Wrapper -->
             <div class="flex flex-col gap-4">
 
-                <!-- Top-Right: Task Inbox -->
+                <!-- Top-Right: Daily Focus -->
+                <div id="daily-focus-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col border-2 border-primary-blue">
+                    <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Daily Focus</h2>
+                    <div id="daily-focus-list" class="list-container flex-grow max-h-[35vh] overflow-y-auto space-y-2 mb-4 p-2 border-b">
+                        <!-- Daily items will be rendered here -->
+                    </div>
+                    <div class="h-[1.75rem] mb-4 mt-auto"></div>
+                    <p class="text-center text-sm text-poppins text-gray-500 pt-4">Drag tasks or reading items here to plan your day.</p>
+                </div>
+
+                <!-- Bottom-Right: Task Inbox -->
                 <div id="todo-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
                     <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Task Inbox</h2>
                     <div id="todo-list" class="list-container flex-grow max-h-[35vh] overflow-y-auto space-y-2 mb-4 p-2 border-b"></div>
                     <div class="h-[1.75rem] mb-4 mt-auto"></div>
                     <form id="add-todo-form" class="flex space-x-2 pt-4"><input type="text" id="new-todo-text" placeholder="Add..." class="flex-grow p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-green text-poppins"><button type="submit" class="text-poppins font-semibold bg-primary-green text-white rounded-lg px-4 py-3 shadow-md hover:bg-green-600 transition">Add Task</button></form>
-                </div>
-
-                <!-- Bottom-Right: Daily Focus -->
-                <div id="daily-focus-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col border-2 border-primary-blue">
-                    <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Daily Focus</h2>
-                    <div id="daily-focus-list" class="list-container flex-grow max-h-[35vh] overflow-y-auto space-y-2 mb-4 p-2 border-b">
-                        <!-- Daily tasks will be rendered here -->
-                    </div>
-                    <div class="h-[1.75rem] mb-4 mt-auto"></div>
-                    <p class="text-center text-sm text-poppins text-gray-500 pt-4">Drag tasks from the Inbox here to plan your day.</p>
                 </div>
             </div>
 
@@ -82,8 +82,8 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         // ⚠️ CRITICAL: Replace these with your actual DEV Supabase credentials.
-        const SUPABASE_URL = "https://uqaxcejfjargwoyvaein.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA"; 
+        const SUPABASE_URL = "YOUR_DEV_SUPABASE_URL"; 
+        const SUPABASE_ANON_KEY = "YOUR_DEV_SUPABASE_ANON_KEY"; 
         
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos';
@@ -102,14 +102,16 @@
         async function initializeSupabase() {
             loadingElement.style.display = 'flex';
             supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            supabase.auth.onAuthStateChange((_, session) => {
+            supabase.auth.onAuthStateChange(async (_, session) => {
                 const wasLoggedIn = !!userId;
                 userId = session?.user?.id || null;
                 updateAuthButton(!userId, session?.user?.email);
                 updateFormState(!!userId);
                 if (!!userId && !wasLoggedIn) {
-                    setupRealtimeListener(SUPABASE_TABLE_READING);
-                    setupRealtimeListener(SUPABASE_TABLE_TODOS);
+                    await Promise.all([
+                        setupRealtimeListener(SUPABASE_TABLE_READING),
+                        setupRealtimeListener(SUPABASE_TABLE_TODOS)
+                    ]);
                 } else if (!userId) {
                     readingList = [];
                     todoList = [];
@@ -118,55 +120,71 @@
                 }
             });
         }
-        async function fetchAndRenderList(tableName) {
-            if (!userId) { loadingElement.style.display = 'none'; renderAllLists(); return; }
-            const { data, error } = await supabase.from(tableName).select('*').eq('user_id', userId);
-            if (error) { showModal(`Could not load ${tableName}. Check RLS policies.`); loadingElement.style.display = 'none'; return; }
-            if (tableName === SUPABASE_TABLE_READING) readingList = data;
-            else todoList = data;
+        async function fetchAndRenderAllLists() {
+            if (!userId) {
+                loadingElement.style.display = 'none';
+                renderAllLists();
+                return;
+            }
+            const [reading, todos] = await Promise.all([
+                supabase.from(SUPABASE_TABLE_READING).select('*').eq('user_id', userId),
+                supabase.from(SUPABASE_TABLE_TODOS).select('*').eq('user_id', userId)
+            ]);
+            
+            if (reading.error || todos.error) {
+                showModal(`Could not load data. Check RLS policies.`);
+                loadingElement.style.display = 'none';
+                return;
+            }
+            readingList = reading.data;
+            todoList = todos.data;
             renderAllLists();
             loadingElement.style.display = 'none';
         }
+
         function setupRealtimeListener(tableName) {
             if (!userId) return;
             const channelId = `changes-${tableName}-${userId}`;
             let channel = supabase.getChannels().find(c => c.topic.includes(channelId));
             if (channel) return;
-            supabase.channel(channelId).on('postgres_changes', 
-                { event: '*', schema: 'public', table: tableName, filter: `user_id=eq.${userId}` },
-                () => fetchAndRenderList(tableName)
-            ).subscribe(status => {
-                if (status === 'SUBSCRIBED') fetchAndRenderList(tableName);
+            
+            return new Promise((resolve) => {
+                supabase.channel(channelId).on('postgres_changes', 
+                    { event: '*', schema: 'public', table: tableName, filter: `user_id=eq.${userId}` },
+                    () => fetchAndRenderAllLists()
+                ).subscribe(status => {
+                    if (status === 'SUBSCRIBED') {
+                        fetchAndRenderAllLists();
+                        resolve();
+                    }
+                });
             });
         }
 
         function renderAllLists() {
             renderReadingList();
             renderTodoList();
+            renderDailyFocusList();
         }
 
         function renderReadingList() {
             const list = readingList.sort((a,b) => a.completed - b.completed || a.order - b.order);
             readingListElement.innerHTML = '';
-            if (list.length === 0 && userId) { readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">Your reading list is empty.</p>`; return; }
-            list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING, false)));
+            if (list.length === 0 && userId) { 
+                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">Your reading list is empty.</p>`;
+            } else {
+                list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING, false)));
+            }
         }
         
         function renderTodoList() {
             const openContainers = document.querySelectorAll('.subtask-container:not(.hidden)');
             expandedTodoParents = new Set(Array.from(openContainers).map(c => c.dataset.parentId));
-            
             todoListElement.innerHTML = '';
-            dailyFocusListElement.innerHTML = '';
-
+            
             const inboxTodos = todoList.filter(item => !item.parent_id);
-            const dailyTodos = todoList.filter(item => item.is_daily && !item.parent_id);
-
             if (inboxTodos.length === 0 && userId) {
                 todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">You have no tasks!</p>`;
-            }
-            if (dailyTodos.length === 0 && userId) {
-                dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">Drag tasks here for today.</p>`;
             }
 
             const inboxMap = new Map();
@@ -179,19 +197,38 @@
                 const subtaskContainer = createSubtaskContainer(mainTodo);
                 todoListElement.append(mainLi, subtaskContainer);
             });
-            
-            const dailyMap = new Map();
-            dailyTodos.forEach(item => { dailyMap.set(item.id, { ...item, children: [] }); });
-            todoList.forEach(item => { if (item.parent_id && dailyMap.has(item.parent_id)) dailyMap.get(item.parent_id)?.children.push(item); });
+            reExpandSubtasks();
+        }
 
-            const sortedDaily = [...dailyMap.values()].sort((a,b) => a.completed - b.completed || a.order - b.order);
-            sortedDaily.forEach(mainTodo => {
-                const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, mainTodo.children.length);
-                const subtaskContainer = createSubtaskContainer(mainTodo);
-                dailyFocusListElement.append(mainLi, subtaskContainer);
+        function renderDailyFocusList() {
+            dailyFocusListElement.innerHTML = '';
+
+            const dailyReading = readingList.filter(item => item.is_daily);
+            const dailyTodos = todoList.filter(item => item.is_daily && !item.parent_id);
+            const dailyItems = [...dailyReading, ...dailyTodos];
+
+            if (dailyItems.length === 0 && userId) {
+                dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">Drag items here for today.</p>`;
+            }
+
+            dailyItems.sort((a,b) => (a.order || 0) - (b.order || 0)).forEach(item => {
+                 const isTodo = 'parent_id' in item; 
+                 const childCount = isTodo ? (todoList.filter(t => t.parent_id === item.id).length) : 0;
+                 const tableName = isTodo ? SUPABASE_TABLE_TODOS : SUPABASE_TABLE_READING;
+                 
+                 const mainLi = createItemElement(item, tableName, false, childCount);
+                 dailyFocusListElement.appendChild(mainLi);
+
+                 if(isTodo && childCount > 0){
+                     const subtaskContainer = createSubtaskContainer(item);
+                     dailyFocusListElement.appendChild(subtaskContainer);
+                 }
             });
+            reExpandSubtasks();
+        }
 
-            expandedTodoParents.forEach(id => {
+        function reExpandSubtasks(){
+             expandedTodoParents.forEach(id => {
                 const container = document.querySelector(`.subtask-container[data-parent-id="${id}"]`);
                 if (container) {
                     container.classList.remove('hidden');
@@ -205,7 +242,8 @@
             const subtaskContainer = document.createElement('div');
             subtaskContainer.className = 'mt-1 space-y-1 subtask-container hidden';
             subtaskContainer.dataset.parentId = mainTodo.id;
-            mainTodo.children.sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
+            const children = todoList.filter(t => t.parent_id === mainTodo.id);
+            children.sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
                 subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
             });
             return subtaskContainer;
@@ -312,29 +350,25 @@
         }
         async function addItem(tableName, text, parentId = null) {
             if (!userId || !text.trim()) return;
-            const currentList = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
-            const itemsToOrder = currentList.filter(i => (parentId ? i.parent_id === parentId : (i.parent_id === null || i.parent_id === undefined)));
+            const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
+            const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : (!i.parent_id)));
             const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
-            const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder };
+            const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false };
             if (tableName === SUPABASE_TABLE_TODOS) {
                 itemToAdd.parent_id = parentId;
-                if (!parentId) itemToAdd.is_daily = false;
             }
-            const { data: newData, error } = await supabase.from(tableName).insert(itemToAdd).select().single();
-            if (error) { showModal(`Failed to add item. Check RLS policies.`); } 
-            else { currentList.push(newData); renderAllLists(); if (!parentId) document.getElementById(`new-${tableName.split('_')[0]}-text`).value = ''; }
+            const { error } = await supabase.from(tableName).insert(itemToAdd);
+            if (error) { showModal(`Failed to add item. Check RLS policies.`); }
         }
         async function toggleCompleted(tableName, id, status) {
             if (!userId) return;
             const { error } = await supabase.from(tableName).update({ completed: status }).eq('id', id);
-            if (error) { showModal("Failed to update status."); } 
-            else { const item = (tableName === SUPABASE_TABLE_READING ? readingList : todoList).find(i => i.id === id); if (item) item.completed = status; renderAllLists(); }
+            if (error) { showModal("Failed to update status."); }
         }
         async function deleteItem(tableName, id) {
             if (!userId) return;
             const { error } = await supabase.from(tableName).delete().eq('id', id);
             if (error) { showModal("Failed to delete item."); } 
-            else { if (tableName === SUPABASE_TABLE_READING) readingList = readingList.filter(i => i.id !== id); else todoList = todoList.filter(i => i.id !== id); renderAllLists(); }
         }
         
         let draggedItem = null;
@@ -352,9 +386,11 @@
             const container = e.target.closest('.list-container');
             if (!container) return;
 
-            if (draggedItem.dataset.table !== SUPABASE_TABLE_TODOS && container.id !== 'reading-list') return;
-            if (draggedItem.dataset.table === SUPABASE_TABLE_TODOS && !['todo-list', 'daily-focus-list'].includes(container.id)) return;
-            
+            const draggedTable = draggedItem.dataset.table;
+            if (container.id === 'daily-focus-list' && !['reading_list', 'todos'].includes(draggedTable)) return;
+            if (container.id === 'reading-list' && draggedTable !== 'reading_list') return;
+            if (container.id === 'todo-list' && draggedTable !== 'todos') return;
+
             const target = e.target.closest('[draggable="true"]');
             const indicator = document.querySelector('.drag-over-indicator') || document.createElement('div');
             indicator.className = 'drag-over-indicator';
@@ -379,33 +415,40 @@
             const tableName = draggedItem.dataset.table;
             const draggedId = draggedItem.dataset.id;
             
-            if (tableName === SUPABASE_TABLE_TODOS) {
-                const isMovingToDaily = dropContainer.id === 'daily-focus-list';
-                const isMovingToInbox = dropContainer.id === 'todo-list';
-
-                if (isMovingToDaily) {
-                    await supabase.from(tableName).update({ is_daily: true }).eq('id', draggedId);
-                } else if (isMovingToInbox) {
-                    const originalItem = todoList.find(t => t.id == draggedId);
-                    if (originalItem && originalItem.is_daily) {
-                        await supabase.from(tableName).update({ is_daily: false }).eq('id', draggedId);
-                    }
-                }
+            const isMovingToDaily = dropContainer.id === 'daily-focus-list';
+            
+            const listToCheck = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
+            const originalItem = listToCheck.find(i => i.id == draggedId);
+            const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
+            
+            if (isMovingToDaily) {
+                await supabase.from(tableName).update({ is_daily: true }).eq('id', draggedId);
+            } else if (isLeavingDaily) {
+                 await supabase.from(tableName).update({ is_daily: false }).eq('id', draggedId);
             }
             
             const indicator = dropContainer.querySelector('.drag-over-indicator');
             if (indicator) {
                 dropContainer.insertBefore(draggedItem, indicator);
                 const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id);
-                const updates = listItems.map((item, index) => ({ id: item.dataset.id, order: index + 1 }));
+                
+                const updatesByTable = { reading_list: [], todos: [] };
+                listItems.forEach((item, index) => {
+                    const tableKey = item.dataset.table;
+                    if(updatesByTable[tableKey]){
+                        updatesByTable[tableKey].push({ id: item.dataset.id, order: index + 1 });
+                    }
+                });
 
-                const { error } = await supabase.from(tableName).upsert(updates);
-                if (error) {
-                    showModal("Failed to save new order.");
-                }
+                const promises = Object.keys(updatesByTable).map(table => {
+                    if (updatesByTable[table].length > 0) {
+                        return supabase.from(table).upsert(updatesByTable[table]);
+                    }
+                }).filter(Boolean);
+                
+                await Promise.all(promises);
             }
             
-            fetchAndRenderList(tableName);
             handleDragEnd();
         }
 
