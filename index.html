@@ -91,9 +91,7 @@
         const dailyFocusListElement = document.getElementById('daily-focus-list');
         const loadingElement = document.getElementById('loading');
         
-        // ✨ CONNECTION BUG FIX V2: New robust startup logic
         async function initializeSupabase() {
-            // New check for placeholder credentials
             if (SUPABASE_URL.includes("YOUR_DEV_SUPABASE_URL")) {
                 loadingElement.innerHTML = `<p class="text-red-500 font-bold text-center text-poppins">Error: Supabase URL and Key are not set. Please replace the placeholder values in the script.</p>`;
                 return;
@@ -102,19 +100,16 @@
             loadingElement.style.display = 'flex';
             supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-            // This listener is now the single source of truth for the app's state.
             supabase.auth.onAuthStateChange(async (event, session) => {
                 userId = session?.user?.id || null;
                 updateAuthButton(!userId, session?.user?.email);
                 updateFormState(!!userId);
 
                 if (userId) {
-                    // This block runs on initial load if logged in, and after a successful login.
                     await fetchAndRenderAllLists();
                     setupRealtimeListener(SUPABASE_TABLE_READING);
                     setupRealtimeListener(SUPABASE_TABLE_TODOS);
                 } else {
-                    // This block runs on initial load if logged out, and after a logout.
                     readingList = [];
                     todoList = [];
                     renderAllLists();
@@ -435,6 +430,7 @@
         // --- Helper Functions and Event Listeners ---
         ['dragover'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
+        // ✨ BUG FIX: This line was missing, breaking all buttons. It is now restored.
         Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
         document.getElementById('add-reading-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_READING, document.getElementById('new-reading-text').value); });
         document.getElementById('add-todo-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_TODOS, document.getElementById('new-todo-text').value); });
