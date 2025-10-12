@@ -40,7 +40,6 @@
         <h1 class="text-4xl sm:text-5xl font-garamond font-bold mb-8 text-center border-b pb-4 px-4 sm:px-6">Productivity Hub</h1>
         <div id="loading" class="flex justify-center items-center py-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-blue"></div><p class="ml-3 text-poppins">Connecting...</p></div>
         
-        <!-- ✨ LAYOUT FIX: Added lg:items-start to make column heights independent -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:p-6 lg:items-start">
             
             <div id="reading-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
@@ -429,7 +428,8 @@
                 const parentId = dropTarget.dataset.parentId;
                 const readingItem = readingList.find(i => i.id == draggedId);
                 if (readingItem && parentId) {
-                    await addItem(SUPABASE_TABLE_TODOS, `From reading: ${readingItem.text}`, parentId);
+                    const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); // Remove italics
+                    await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
                 }
                 return handleDragEnd();
             }
@@ -451,13 +451,10 @@
                 let reorderPromise = null;
                 const indicator = dropTarget.querySelector('.drag-over-indicator');
                 if (indicator) {
-                    // Temporarily move the item in the DOM to get the correct new order
                     dropTarget.insertBefore(draggedItem, indicator);
                     
                     const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
-                    const listItems = Array.from(dropTarget.children);
-
-                    listItems.forEach((itemEl, index) => {
+                    Array.from(dropTarget.children).forEach((itemEl, index) => {
                         const id = itemEl.dataset.id;
                         const table = itemEl.dataset.table;
                         if (id && table && updatesByTable[table]) {
@@ -474,10 +471,7 @@
                     }
                 }
                 
-                // Wait for all database changes to complete
                 await Promise.all([statusUpdatePromise, reorderPromise].filter(Boolean));
-                
-                // Only after everything is saved, fetch the definitive state from the server
                 await fetchAndRenderAllLists();
             }
             
