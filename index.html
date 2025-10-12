@@ -91,37 +91,44 @@
         const dailyFocusListElement = document.getElementById('daily-focus-list');
         const loadingElement = document.getElementById('loading');
         
-        async function initializeSupabase() {
+        // ✨ FINAL CONNECTION FIX: Rewritten for stability
+        function initializeApp() {
             if (SUPABASE_URL.includes("YOUR_DEV_SUPABASE_URL")) {
                 loadingElement.innerHTML = `<p class="text-red-500 font-bold text-center text-poppins">Error: Supabase URL and Key are not set. Please replace the placeholder values in the script.</p>`;
                 return;
             }
 
-            loadingElement.style.display = 'flex';
             supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-            supabase.auth.onAuthStateChange(async (event, session) => {
-                userId = session?.user?.id || null;
-                updateAuthButton(!userId, session?.user?.email);
-                updateFormState(!!userId);
-
-                if (userId) {
-                    await fetchAndRenderAllLists();
-                    setupRealtimeListener(SUPABASE_TABLE_READING);
-                    setupRealtimeListener(SUPABASE_TABLE_TODOS);
-                } else {
-                    readingList = [];
-                    todoList = [];
-                    renderAllLists();
-                    loadingElement.style.display = 'none';
+            supabase.auth.onAuthStateChange((event, session) => {
+                const newUserId = session?.user?.id || null;
+                if (newUserId !== userId) {
+                    userId = newUserId;
+                    handleAuthStateChange(!!userId, session?.user?.email);
                 }
             });
+        }
+        
+        async function handleAuthStateChange(isLoggedIn, email) {
+            updateAuthButton(!isLoggedIn, email);
+            updateFormState(isLoggedIn);
+            
+            if (isLoggedIn) {
+                loadingElement.style.display = 'flex';
+                await fetchAndRenderAllLists();
+                setupRealtimeListeners();
+            } else {
+                readingList = [];
+                todoList = [];
+                renderAllLists();
+                loadingElement.style.display = 'none';
+            }
         }
 
         async function fetchAndRenderAllLists() {
             if (!userId) { 
-                loadingElement.style.display = 'none'; 
                 renderAllLists(); 
+                loadingElement.style.display = 'none';
                 return; 
             }
             const [reading, todos] = await Promise.all([
@@ -140,15 +147,18 @@
             loadingElement.style.display = 'none';
         }
 
-        function setupRealtimeListener(tableName) {
+        function setupRealtimeListeners() {
             if (!userId) return;
-            const channelId = `changes-${tableName}-${userId}`;
-            if (supabase.getChannels().some(c => c.topic.includes(channelId))) return;
-            
-            supabase.channel(channelId).on('postgres_changes', 
-                { event: '*', schema: 'public', table: tableName, filter: `user_id=eq.${userId}` },
-                () => fetchAndRenderAllLists()
-            ).subscribe();
+            const tables = [SUPABASE_TABLE_READING, SUPABASE_TABLE_TODOS];
+            tables.forEach(tableName => {
+                const channelId = `changes-${tableName}-${userId}`;
+                if (supabase.getChannels().some(c => c.topic.includes(channelId))) return;
+                
+                supabase.channel(channelId).on('postgres_changes', 
+                    { event: '*', schema: 'public', table: tableName, filter: `user_id=eq.${userId}` },
+                    () => fetchAndRenderAllLists()
+                ).subscribe();
+            });
         }
 
         function renderAllLists() {
@@ -399,7 +409,6 @@
             const originalItem = listToCheck.find(i => i.id == draggedId);
             const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
 
-            // Optimistic UI update
             if (isMovingToDaily) originalItem.is_daily = true;
             if (isLeavingDaily) originalItem.is_daily = false;
 
@@ -417,7 +426,6 @@
             renderAllLists();
             handleDragEnd();
 
-            // Send all updates to Supabase in the background
             if (isMovingToDaily) await supabase.from(tableName).update({ is_daily: true }).eq('id', draggedId);
             if (isLeavingDaily) await supabase.from(tableName).update({ is_daily: false }).eq('id', draggedId);
             
@@ -428,12 +436,23 @@
         }
 
         // --- Helper Functions and Event Listeners ---
+        function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in as ${email}`; btn.onclick = isLoggedOut ? openAuthModal : handleLogout; }
+        function updateFormState(isLoggedIn) { document.querySelectorAll('#add-reading-form input, #add-reading-form button, #add-todo-form input, #add-todo-form button').forEach(el => el.disabled = !isLoggedIn); document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Author (Year): *Title*" : "Please log in"; document.getElementById('new-todo-text').placeholder = isLoggedIn ? "Buy milk, etc." : "Please log in"; }
+        async function handleAuthSubmit(e) { e.preventDefault(); const email = document.getElementById('auth-email').value, password = document.getElementById('auth-password').value; const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) document.getElementById('auth-message').textContent = error.message; else closeAuthModal(); }
+        async function handleLogout() { await supabase.auth.signOut(); }
+        function openAuthModal() { document.getElementById('auth-modal').style.display = 'flex'; }
+        function closeAuthModal() { document.getElementById('auth-modal').style.display = 'none'; }
+        function showModal(message) { document.getElementById('modal-text').textContent = message; document.getElementById('message-area').style.display = 'flex'; }
+        function closeModal() { document.getElementById('message-area').style.display = 'none'; }
+
+        // ✨ LOGIN BUTTON FIX: This line makes the onclick attributes work correctly.
+        Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
+        
         ['dragover'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
-        // ✨ BUG FIX: This line was missing, breaking all buttons. It is now restored.
-        Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
         document.getElementById('add-reading-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_READING, document.getElementById('new-reading-text').value); });
         document.getElementById('add-todo-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_TODOS, document.getElementById('new-todo-text').value); });
+        
         const readingListDropZone = document.getElementById('reading-column');
         ['dragenter', 'dragover'].forEach(evt => readingListDropZone.addEventListener(evt, e => { e.preventDefault(); if (e.dataTransfer?.types?.includes('Files')) readingListDropZone.classList.add('file-drag-active'); }));
         ['dragleave', 'drop'].forEach(evt => readingListDropZone.addEventListener(evt, e => { e.preventDefault(); readingListDropZone.classList.remove('file-drag-active'); }));
@@ -449,16 +468,12 @@
                 await addItem(SUPABASE_TABLE_READING, `${authors} (${year}): *${title}*`);
             }
         });
-        function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in as ${email}`; btn.onclick = isLoggedOut ? openAuthModal : handleLogout; }
-        function updateFormState(isLoggedIn) { document.querySelectorAll('#add-reading-form input, #add-reading-form button, #add-todo-form input, #add-todo-form button').forEach(el => el.disabled = !isLoggedIn); document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Author (Year): *Title*" : "Please log in"; document.getElementById('new-todo-text').placeholder = isLoggedIn ? "Buy milk, etc." : "Please log in"; }
-        async function handleAuthSubmit(e) { e.preventDefault(); const email = document.getElementById('auth-email').value, password = document.getElementById('auth-password').value; const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) document.getElementById('auth-message').textContent = error.message; else closeAuthModal(); }
-        async function handleLogout() { await supabase.auth.signOut(); }
-        function openAuthModal() { document.getElementById('auth-modal').style.display = 'flex'; }
-        function closeAuthModal() { document.getElementById('auth-modal').style.display = 'none'; }
-        function showModal(message) { document.getElementById('modal-text').textContent = message; document.getElementById('message-area').style.display = 'flex'; }
-        function closeModal() { document.getElementById('message-area').style.display = 'none'; }
-        window.onload = initializeSupabase;
+        
+        // This is now the very last thing that runs, starting the app.
+        initializeApp();
     </script>
 </body>
 </html>
+
+
 
