@@ -18,6 +18,8 @@
         .drag-over-indicator { border-top: 2px solid #3498db; margin-top: -2px; height: 0; }
         .file-drag-active { box-shadow: 0 0 0 4px #3498db inset; }
         .subtask-container { padding-left: 2.5rem; }
+        /* ✨ New style to highlight the subtask drop zone */
+        .subtask-drop-active { background-color: #ecf0f1; }
     </style>
     <script>
         tailwind.config = {
@@ -91,7 +93,6 @@
         const dailyFocusListElement = document.getElementById('daily-focus-list');
         const loadingElement = document.getElementById('loading');
         
-        // ✨ FINAL CONNECTION FIX: Rewritten for stability
         function initializeApp() {
             if (SUPABASE_URL.includes("YOUR_DEV_SUPABASE_URL")) {
                 loadingElement.innerHTML = `<p class="text-red-500 font-bold text-center text-poppins">Error: Supabase URL and Key are not set. Please replace the placeholder values in the script.</p>`;
@@ -149,8 +150,7 @@
 
         function setupRealtimeListeners() {
             if (!userId) return;
-            const tables = [SUPABASE_TABLE_READING, SUPABASE_TABLE_TODOS];
-            tables.forEach(tableName => {
+            [SUPABASE_TABLE_READING, SUPABASE_TABLE_TODOS].forEach(tableName => {
                 const channelId = `changes-${tableName}-${userId}`;
                 if (supabase.getChannels().some(c => c.topic.includes(channelId))) return;
                 
@@ -228,12 +228,15 @@
 
         function createSubtaskContainer(mainTodo) {
             const subtaskContainer = document.createElement('div');
-            subtaskContainer.className = 'mt-1 space-y-1 subtask-container hidden';
+            subtaskContainer.className = 'mt-1 space-y-1 subtask-container';
             subtaskContainer.dataset.parentId = mainTodo.id;
             const children = todoList.filter(t => t.parent_id === mainTodo.id);
             children.sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
                 subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
             });
+             if (!expandedTodoParents.has(mainTodo.id.toString())) {
+                subtaskContainer.classList.add('hidden');
+            }
             return subtaskContainer;
         }
 
@@ -254,7 +257,7 @@
             if (!isSubtask && childCount > 0) {
                 const toggleButton = document.createElement('button');
                 toggleButton.className = 'mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
-                toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
+                toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform ${expandedTodoParents.has(item.id.toString()) ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
                 toggleButton.onclick = function() {
                     const parentElement = this.closest('[data-id]');
                     const subtaskContainer = parentElement.nextElementSibling;
@@ -364,7 +367,7 @@
             const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
             const item = list.find(i => i.id == id);
             if(item) item.is_daily = false;
-            renderAllLists(); // Optimistic update
+            renderAllLists();
             await supabase.from(tableName).update({ is_daily: false }).eq('id', id);
         }
 
@@ -372,67 +375,102 @@
         function handleDragStart(e) { draggedItem = this; setTimeout(() => this.classList.add('drag-source'), 0); }
         function handleDragEnd() {
             draggedItem?.classList.remove('drag-source');
-            document.querySelectorAll('.drag-over-indicator').forEach(el => el.remove());
+            document.querySelectorAll('.drag-over-indicator, .subtask-drop-active').forEach(el => {
+                el.classList.remove('subtask-drop-active');
+                if (el.classList.contains('drag-over-indicator')) el.remove();
+            });
             draggedItem = null;
         }
-        function handleDragLeave(e) { }
+        function handleDragLeave(e) {
+             const target = e.target.closest('.subtask-container');
+             if(target) target.classList.remove('subtask-drop-active');
+        }
+
+        // ✨ Updated to handle dropping reading items on subtask containers
         function handleDragEnter(e) {
             e.preventDefault();
             if (!draggedItem || draggedItem.dataset.isSubtask === 'true') return;
-            const container = e.target.closest('.list-container');
-            if (!container) return;
+            
+            const dropTarget = e.target.closest('.list-container, .subtask-container');
+            if (!dropTarget) return;
+
             const draggedTable = draggedItem.dataset.table;
-            if (container.id === 'daily-focus-list' && !['reading_list', 'todos'].includes(draggedTable)) return;
-            if (container.id === 'reading-list' && draggedTable !== 'reading_list') return;
-            if (container.id === 'todo-list' && draggedTable !== 'todos') return;
-            const target = e.target.closest('[draggable="true"]');
-            const indicator = document.querySelector('.drag-over-indicator') || document.createElement('div');
-            indicator.className = 'drag-over-indicator';
-            indicator.style.borderColor = container.id.includes('daily') ? '#3498db' : '#2ecc71';
-            if (target?.parentNode === container) {
-                const rect = target.getBoundingClientRect();
-                if (e.clientY - rect.top < rect.height / 2) container.insertBefore(indicator, target);
-                else container.insertBefore(indicator, target.nextSibling);
-            } else { container.appendChild(indicator); }
+
+            // SCENARIO 1: Dragging a reading item to create a subtask
+            if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
+                dropTarget.classList.add('subtask-drop-active');
+                return;
+            }
+
+            // SCENARIO 2: Regular reordering
+            if (dropTarget.classList.contains('list-container')) {
+                if (draggedTable === 'reading_list' && dropTarget.id !== 'reading-list' && dropTarget.id !== 'daily-focus-list') return;
+                if (draggedTable === 'todos' && dropTarget.id === 'reading-list') return;
+                
+                const targetEl = e.target.closest('[draggable="true"]');
+                const indicator = document.querySelector('.drag-over-indicator') || document.createElement('div');
+                indicator.className = 'drag-over-indicator';
+                indicator.style.borderColor = dropTarget.id.includes('daily') ? '#3498db' : '#2ecc71';
+                if (targetEl?.parentNode === dropTarget) {
+                    const rect = targetEl.getBoundingClientRect();
+                    if (e.clientY - rect.top < rect.height / 2) dropTarget.insertBefore(indicator, targetEl);
+                    else dropTarget.insertBefore(indicator, targetEl.nextSibling);
+                } else { dropTarget.appendChild(indicator); }
+            }
         }
 
+        // ✨ Updated to handle creating a subtask from a reading item
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
-            const dropContainer = e.target.closest('.list-container');
-            if (!dropContainer || draggedItem.dataset.isSubtask === 'true') return handleDragEnd();
-
-            const tableName = draggedItem.dataset.table;
-            const draggedId = draggedItem.dataset.id;
-            const isMovingToDaily = dropContainer.id === 'daily-focus-list';
-            const listToCheck = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-            const originalItem = listToCheck.find(i => i.id == draggedId);
-            const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
-
-            if (isMovingToDaily) originalItem.is_daily = true;
-            if (isLeavingDaily) originalItem.is_daily = false;
-
-            const indicator = dropContainer.querySelector('.drag-over-indicator');
-            if (indicator) {
-                const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id && el !== draggedItem);
-                listItems.splice(Array.from(indicator.parentNode.children).indexOf(indicator), 0, draggedItem);
-                
-                listItems.forEach((item, index) => {
-                    const list = item.dataset.table === SUPABASE_TABLE_READING ? readingList : todoList;
-                    const movedItem = list.find(i => i.id == item.dataset.id);
-                    if(movedItem) movedItem.order = index + 1;
-                });
-            }
-            renderAllLists();
-            handleDragEnd();
-
-            if (isMovingToDaily) await supabase.from(tableName).update({ is_daily: true }).eq('id', draggedId);
-            if (isLeavingDaily) await supabase.from(tableName).update({ is_daily: false }).eq('id', draggedId);
             
-            if (indicator) {
-                const updates = listToCheck.map(i => ({ id: i.id, order: i.order }));
-                await supabase.from(tableName).upsert(updates);
+            const dropTarget = e.target.closest('.list-container, .subtask-container');
+            if (!dropTarget) return handleDragEnd();
+
+            const draggedTable = draggedItem.dataset.table;
+            const draggedId = draggedItem.dataset.id;
+
+            // SCENARIO 1: Dropped reading item on a subtask container
+            if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
+                const parentId = dropTarget.dataset.parentId;
+                const readingItem = readingList.find(i => i.id == draggedId);
+                if (readingItem && parentId) {
+                    await addItem(SUPABASE_TABLE_TODOS, readingItem.text, parentId);
+                }
+                handleDragEnd();
+                return;
             }
+
+            // SCENARIO 2: Regular drop on a main list container
+            if (dropTarget.classList.contains('list-container')) {
+                const isMovingToDaily = dropTarget.id === 'daily-focus-list';
+                const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
+                const originalItem = listToCheck.find(i => i.id == draggedId);
+                const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
+
+                if (isMovingToDaily) originalItem.is_daily = true;
+                if (isLeavingDaily) originalItem.is_daily = false;
+
+                const indicator = dropTarget.querySelector('.drag-over-indicator');
+                if (indicator) {
+                    const listItems = Array.from(dropTarget.children).filter(el => el.dataset.id && el !== draggedItem);
+                    listItems.splice(Array.from(indicator.parentNode.children).indexOf(indicator), 0, draggedItem);
+                    listItems.forEach((item, index) => {
+                        const list = item.dataset.table === SUPABASE_TABLE_READING ? readingList : todoList;
+                        const movedItem = list.find(i => i.id == item.dataset.id);
+                        if(movedItem) movedItem.order = index + 1;
+                    });
+                }
+                renderAllLists();
+                
+                if (isMovingToDaily) await supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId);
+                if (isLeavingDaily) await supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId);
+                if (indicator) {
+                    const updates = listToCheck.map(i => ({ id: i.id, order: i.order }));
+                    await supabase.from(draggedTable).upsert(updates);
+                }
+            }
+            handleDragEnd();
         }
 
         // --- Helper Functions and Event Listeners ---
@@ -444,15 +482,11 @@
         function closeAuthModal() { document.getElementById('auth-modal').style.display = 'none'; }
         function showModal(message) { document.getElementById('modal-text').textContent = message; document.getElementById('message-area').style.display = 'flex'; }
         function closeModal() { document.getElementById('message-area').style.display = 'none'; }
-
-        // ✨ LOGIN BUTTON FIX: This line makes the onclick attributes work correctly.
         Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
-        
         ['dragover'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
         document.getElementById('add-reading-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_READING, document.getElementById('new-reading-text').value); });
         document.getElementById('add-todo-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_TODOS, document.getElementById('new-todo-text').value); });
-        
         const readingListDropZone = document.getElementById('reading-column');
         ['dragenter', 'dragover'].forEach(evt => readingListDropZone.addEventListener(evt, e => { e.preventDefault(); if (e.dataTransfer?.types?.includes('Files')) readingListDropZone.classList.add('file-drag-active'); }));
         ['dragleave', 'drop'].forEach(evt => readingListDropZone.addEventListener(evt, e => { e.preventDefault(); readingListDropZone.classList.remove('file-drag-active'); }));
@@ -468,12 +502,8 @@
                 await addItem(SUPABASE_TABLE_READING, `${authors} (${year}): *${title}*`);
             }
         });
-        
-        // This is now the very last thing that runs, starting the app.
         initializeApp();
     </script>
 </body>
 </html>
-
-
 
