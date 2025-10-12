@@ -18,7 +18,6 @@
         .drag-over-indicator { border-top: 2px solid #3498db; margin-top: -2px; height: 0; }
         .file-drag-active { box-shadow: 0 0 0 4px #3498db inset; }
         .subtask-container { padding-left: 2.5rem; }
-        /* ✨ New style to highlight the subtask drop zone */
         .subtask-drop-active { background-color: #ecf0f1; }
     </style>
     <script>
@@ -47,7 +46,8 @@
             
             <div id="reading-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
                 <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Reading List</h2>
-                <div id="reading-list" class="list-container flex-grow max-h-[80vh] overflow-y-auto space-y-2 mb-4 p-2 border-b"></div>
+                <!-- ✨ CHANGE: Removed max-h-[80vh] and overflow-y-auto -->
+                <div id="reading-list" class="list-container flex-grow space-y-2 mb-4 p-2 border-b"></div>
                 <div class="h-[1.75rem] mb-4 mt-auto"></div>
                 <form id="add-reading-form" class="flex space-x-2 pt-4"><input type="text" id="new-reading-text" placeholder="Add..." class="flex-grow p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue text-poppins"><button type="submit" class="text-poppins font-semibold bg-primary-blue text-white rounded-lg px-4 py-3 shadow-md hover:bg-blue-600 transition">Add Text</button></form>
             </div>
@@ -55,14 +55,16 @@
             <div class="flex flex-col gap-4">
                 <div id="daily-focus-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col border-2 border-primary-blue">
                     <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Daily Focus</h2>
-                    <div id="daily-focus-list" class="list-container flex-grow max-h-[35vh] overflow-y-auto space-y-2 mb-4 p-2 border-b"></div>
+                    <!-- ✨ CHANGE: Removed max-h-[35vh] and overflow-y-auto -->
+                    <div id="daily-focus-list" class="list-container flex-grow space-y-2 mb-4 p-2 border-b"></div>
                     <div class="h-[1.75rem] mb-4 mt-auto"></div>
                     <p class="text-center text-sm text-poppins text-gray-500 pt-4">Drag items here to plan your day.</p>
                 </div>
 
                 <div id="todo-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
                     <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Task Inbox</h2>
-                    <div id="todo-list" class="list-container flex-grow max-h-[35vh] overflow-y-auto space-y-2 mb-4 p-2 border-b"></div>
+                    <!-- ✨ CHANGE: Removed max-h-[35vh] and overflow-y-auto -->
+                    <div id="todo-list" class="list-container flex-grow space-y-2 mb-4 p-2 border-b"></div>
                     <div class="h-[1.75rem] mb-4 mt-auto"></div>
                     <form id="add-todo-form" class="flex space-x-2 pt-4"><input type="text" id="new-todo-text" placeholder="Add..." class="flex-grow p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-green text-poppins"><button type="submit" class="text-poppins font-semibold bg-primary-green text-white rounded-lg px-4 py-3 shadow-md hover:bg-green-600 transition">Add Task</button></form>
                 </div>
@@ -385,8 +387,7 @@
              const target = e.target.closest('.subtask-container');
              if(target) target.classList.remove('subtask-drop-active');
         }
-
-        // ✨ Updated to handle dropping reading items on subtask containers
+        
         function handleDragEnter(e) {
             e.preventDefault();
             if (!draggedItem || draggedItem.dataset.isSubtask === 'true') return;
@@ -396,13 +397,11 @@
 
             const draggedTable = draggedItem.dataset.table;
 
-            // SCENARIO 1: Dragging a reading item to create a subtask
-            if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
+            if (draggedTable === SUPABASE_READING && dropTarget.classList.contains('subtask-container')) {
                 dropTarget.classList.add('subtask-drop-active');
                 return;
             }
 
-            // SCENARIO 2: Regular reordering
             if (dropTarget.classList.contains('list-container')) {
                 if (draggedTable === 'reading_list' && dropTarget.id !== 'reading-list' && dropTarget.id !== 'daily-focus-list') return;
                 if (draggedTable === 'todos' && dropTarget.id === 'reading-list') return;
@@ -419,7 +418,6 @@
             }
         }
 
-        // ✨ Updated to handle creating a subtask from a reading item
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -430,8 +428,7 @@
             const draggedTable = draggedItem.dataset.table;
             const draggedId = draggedItem.dataset.id;
 
-            // SCENARIO 1: Dropped reading item on a subtask container
-            if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
+            if (draggedTable === SUPABASE_READING && dropTarget.classList.contains('subtask-container')) {
                 const parentId = dropTarget.dataset.parentId;
                 const readingItem = readingList.find(i => i.id == draggedId);
                 if (readingItem && parentId) {
@@ -441,7 +438,6 @@
                 return;
             }
 
-            // SCENARIO 2: Regular drop on a main list container
             if (dropTarget.classList.contains('list-container')) {
                 const isMovingToDaily = dropTarget.id === 'daily-focus-list';
                 const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
