@@ -74,6 +74,7 @@
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
+        // ⚠️ CRITICAL: Replace these with your actual DEV Supabase credentials.
         const SUPABASE_URL = "https://uqaxcejfjargwoyvaein.supabase.co"; 
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA"; 
         
@@ -91,16 +92,21 @@
         const dailyFocusListElement = document.getElementById('daily-focus-list');
         const loadingElement = document.getElementById('loading');
         
+        // ✨ BUG FIX: Simplified and corrected startup sequence
         async function initializeSupabase() {
             loadingElement.style.display = 'flex';
             supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
             supabase.auth.onAuthStateChange(async (_, session) => {
                 const wasLoggedIn = !!userId;
                 userId = session?.user?.id || null;
                 updateAuthButton(!userId, session?.user?.email);
                 updateFormState(!!userId);
-                if (!!userId && !wasLoggedIn) {
-                    await fetchAndRenderAllLists();
+
+                if (userId && !wasLoggedIn) {
+                    // Step 1: Fetch initial data first.
+                    await fetchAndRenderAllLists(); 
+                    // Step 2: Only after data is loaded, set up listeners.
                     setupRealtimeListener(SUPABASE_TABLE_READING);
                     setupRealtimeListener(SUPABASE_TABLE_TODOS);
                 } else if (!userId) {
@@ -110,17 +116,31 @@
                     loadingElement.style.display = 'none';
                 }
             });
+             // Handle the case where the user is already logged in on page load
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                loadingElement.style.display = 'none';
+            }
         }
+
         async function fetchAndRenderAllLists() {
-            if (!userId) { loadingElement.style.display = 'none'; renderAllLists(); return; }
+            if (!userId) { 
+                loadingElement.style.display = 'none'; 
+                renderAllLists(); 
+                return; 
+            }
             const [reading, todos] = await Promise.all([
                 supabase.from(SUPABASE_TABLE_READING).select('*').eq('user_id', userId),
                 supabase.from(SUPABASE_TABLE_TODOS).select('*').eq('user_id', userId)
             ]);
             
-            if (reading.error || todos.error) { showModal(`Could not load data.`); loadingElement.style.display = 'none'; return; }
-            readingList = reading.data;
-            todoList = todos.data;
+            if (reading.error || todos.error) { 
+                showModal(`Could not load data.`); 
+                loadingElement.style.display = 'none'; 
+                return; 
+            }
+            readingList = reading.data || [];
+            todoList = todos.data || [];
             renderAllLists();
             loadingElement.style.display = 'none';
         }
@@ -128,6 +148,7 @@
         function setupRealtimeListener(tableName) {
             if (!userId) return;
             const channelId = `changes-${tableName}-${userId}`;
+            // Prevent duplicate listeners
             if (supabase.getChannels().some(c => c.topic.includes(channelId))) return;
             
             supabase.channel(channelId).on('postgres_changes', 
@@ -180,7 +201,6 @@
                  const isTodo = 'parent_id' in item;
                  const childCount = isTodo ? todoList.filter(t => t.parent_id === item.id).length : 0;
                  const tableName = isTodo ? SUPABASE_TABLE_TODOS : SUPABASE_TABLE_READING;
-                 // ✨ Pass true for the new isDailyFocusItem parameter
                  const mainLi = createItemElement(item, tableName, false, childCount, true);
                  dailyFocusListElement.appendChild(mainLi);
                  if(isTodo && childCount > 0){
@@ -213,7 +233,6 @@
             return subtaskContainer;
         }
 
-        // ✨ Added a new parameter `isDailyFocusItem`
         function createItemElement(item, tableName, isSubtask = false, childCount = 0, isDailyFocusItem = false) {
             const li = document.createElement('div');
             li.id = `${tableName}-${item.id}`;
@@ -221,10 +240,8 @@
             li.dataset.table = tableName;
             li.dataset.order = item.order;
             li.setAttribute('draggable', !item.completed && !isSubtask);
-            let classes = `flex items-center rounded-xl border border-gray-200 transition-shadow duration-300`;
             li.className = `flex items-center rounded-xl border border-gray-200 transition-shadow duration-300 ${isSubtask ? 'p-2 bg-white' : 'p-3 shadow-sm bg-off-white hover:shadow-md'} ${item.completed ? 'opacity-50' : ''}`;
             li.dataset.isSubtask = String(isSubtask);
-
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragend', handleDragEnd);
             li.addEventListener('dragenter', handleDragEnter);
@@ -265,7 +282,6 @@
             
             li.append(toggleButton, textSpan);
             
-            // ✨ NEW: Add the "Remove from Daily Focus" button if needed
             if(isDailyFocusItem && !isSubtask){
                 const removeButton = document.createElement('button');
                 removeButton.className = 'ml-2 flex-shrink-0 p-2 h-7 w-7 flex items-center justify-center rounded-full text-blue-400 hover:text-blue-600 hover:bg-gray-100 transition';
@@ -339,13 +355,12 @@
             await supabase.from(tableName).delete().eq('id', id);
         }
         
-        // ✨ NEW Function to handle the remove button
         async function removeFromDailyFocus(tableName, id){
             if (!userId) return;
             const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
             const item = list.find(i => i.id == id);
             if(item) item.is_daily = false;
-            renderAllLists();
+            renderAllLists(); // Optimistic update
             await supabase.from(tableName).update({ is_daily: false }).eq('id', id);
         }
 
@@ -377,7 +392,6 @@
             } else { container.appendChild(indicator); }
         }
 
-        // ✨ BUG FIX: Rewritten for optimistic updates
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -397,8 +411,9 @@
 
             const indicator = dropContainer.querySelector('.drag-over-indicator');
             if (indicator) {
-                dropContainer.insertBefore(draggedItem, indicator);
-                const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id);
+                const listItems = Array.from(dropContainer.children).filter(el => el.dataset.id && el !== draggedItem);
+                listItems.splice(Array.from(indicator.parentNode.children).indexOf(indicator), 0, draggedItem);
+                
                 listItems.forEach((item, index) => {
                     const list = item.dataset.table === SUPABASE_TABLE_READING ? readingList : todoList;
                     const movedItem = list.find(i => i.id == item.dataset.id);
@@ -408,7 +423,7 @@
             renderAllLists();
             handleDragEnd();
 
-            // Now, send all updates to Supabase
+            // Send all updates to Supabase in the background
             if (isMovingToDaily) await supabase.from(tableName).update({ is_daily: true }).eq('id', draggedId);
             if (isLeavingDaily) await supabase.from(tableName).update({ is_daily: false }).eq('id', draggedId);
             
@@ -418,6 +433,7 @@
             }
         }
 
+        // --- Helper Functions and Event Listeners ---
         ['dragover'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
         Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
