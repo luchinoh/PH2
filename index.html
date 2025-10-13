@@ -473,10 +473,10 @@ async function handleDrop(e) {
     const dropTarget = e.target.closest('.list-container, .subtask-container');
     if (!dropTarget) return handleDragEnd();
 
-    const draggedId = draggedItem.dataset.id;
+    const draggedId = draggedItem.dataset.id; // keep as string (UUID)
     const draggedTable = draggedItem.dataset.table;
 
-    // temporarily disable pointer events to avoid accidental extra events
+    // temporarily disable pointer events
     document.body.style.pointerEvents = 'none';
 
     try {
@@ -497,7 +497,7 @@ async function handleDrop(e) {
                 if (error) throw error;
             }
         } else {
-            // Ensure the draggedItem is placed at the indicator position in the DOM so we compute new order correctly
+            // Ensure the draggedItem is placed at the indicator position in the DOM
             const indicator = dropTarget.querySelector('.drag-over-indicator');
             if (indicator) {
                 dropTarget.insertBefore(draggedItem, indicator);
@@ -514,40 +514,38 @@ async function handleDrop(e) {
                 .filter(el => el.matches('.bauhaus-item[data-id]'));
 
             itemsToReorder.forEach((itemEl, idx) => {
-                const id = itemEl.dataset.id;
+                const id = itemEl.dataset.id; // ✅ keep as string (UUID)
                 const table = itemEl.dataset.table;
                 if (!id || !table) return;
                 if (!updatesByTable[table]) updatesByTable[table] = [];
-                updatesByTable[table].push({ id: parseInt(id, 10), [orderColumn]: idx });
+                updatesByTable[table].push({ id, [orderColumn]: idx }); // ✅ removed parseInt
             });
 
-            // Also handle change of parent_id for todos moved into/out of subtask containers
+            // Handle change of parent_id for todos moved into/out of subtask containers
             const destIsSubtaskContainer = dropTarget.classList.contains('subtask-container');
             const destParentId = destIsSubtaskContainer ? dropTarget.dataset.parentId : null;
             const sourceParentId = draggedItem.dataset.parentId || null;
             if (draggedTable === SUPABASE_TABLE_TODOS && String(destParentId) !== String(sourceParentId)) {
-                // ensure the dragged item is updated to have new parent_id
                 if (!updatesByTable[SUPABASE_TABLE_TODOS]) updatesByTable[SUPABASE_TABLE_TODOS] = [];
-                updatesByTable[SUPABASE_TABLE_TODOS].push({ id: parseInt(draggedId, 10), parent_id: destParentId });
+                updatesByTable[SUPABASE_TABLE_TODOS].push({ id: draggedId, parent_id: destParentId }); // ✅ removed parseInt
             }
 
-            // If the item moved into or out of the daily-focus panel, set is_daily accordingly
+            // Handle move into/out of daily-focus
             const sourceContainer = draggedItem.parentElement;
             const movedToDaily = dropTarget.closest('#daily-focus-column') !== null;
             const movedFromDaily = sourceContainer && sourceContainer.closest('#daily-focus-column') !== null;
             if (movedToDaily !== movedFromDaily) {
                 if (!updatesByTable[draggedTable]) updatesByTable[draggedTable] = [];
-                updatesByTable[draggedTable].push({ id: parseInt(draggedId, 10), is_daily: movedToDaily });
+                updatesByTable[draggedTable].push({ id: draggedId, is_daily: movedToDaily }); // ✅ removed parseInt
             }
 
-            // Now perform updates. We use explicit update() per-row so errors surface.
+            // Now perform updates
             const allUpdatePromises = [];
             for (const [table, updates] of Object.entries(updatesByTable)) {
                 for (const u of updates) {
-                    const id = u.id;
+                    const id = u.id; // UUID string
                     const payload = Object.assign({}, u);
                     delete payload.id;
-                    // skip empty payload
                     if (Object.keys(payload).length === 0) continue;
                     allUpdatePromises.push(
                         supabase.from(table).update(payload).eq('id', id)
@@ -559,7 +557,6 @@ async function handleDrop(e) {
                 }
             }
 
-            // wait for all updates
             await Promise.all(allUpdatePromises);
         }
 
@@ -569,10 +566,10 @@ async function handleDrop(e) {
     } finally {
         handleDragEnd();
         document.body.style.pointerEvents = 'auto';
-        // re-fetch authoritative state from server
         await fetchAndRenderAllLists();
     }
 }
+
 
 
 
