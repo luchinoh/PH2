@@ -154,6 +154,7 @@
             if (isLoggedIn) {
                 loadingElement.style.display = 'flex';
                 await fetchAndRenderAllLists();
+                // We still use realtime, but only for syncing across tabs, not for primary feedback.
                 setupRealtimeListeners();
             } else {
                 readingList = [];
@@ -510,8 +511,8 @@
                         Array.from(dropTarget.children).forEach((itemEl, index) => {
                             const id = itemEl.dataset.id;
                             const table = itemEl.dataset.table;
+                            // ✨ BUG FIX: Filter out the indicator which has no ID
                             if (id && table && updatesByTable[table]) {
-                                // ✨ BUG FIX: Correctly parse ID to number
                                 updatesByTable[table].push({ id: parseInt(id), order: index });
                             }
                         });
@@ -527,7 +528,7 @@
                 }
             } catch (error) {
                 console.error("Drop operation failed:", error);
-                showModal("An error occurred. Please refresh the page.");
+                showModal("An error occurred. The page will now refresh.");
             } finally {
                 handleDragEnd();
                 document.body.style.pointerEvents = 'auto';
@@ -535,6 +536,7 @@
                 await fetchAndRenderAllLists();
             }
         }
+
 
         // --- Helper Functions and Event Listeners ---
         function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in`; }
