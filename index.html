@@ -403,13 +403,37 @@
             if (!userId) return;
             await supabase.from(tableName).update({ completed: status }).eq('id', id);
         }
+        
+        // ✨ SMOOTHNESS FIX: All actions are now optimistic
         async function deleteItem(tableName, id) {
             if (!userId) return;
-            await supabase.from(tableName).delete().eq('id', id);
+            const originalReadingList = [...readingList];
+            const originalTodoList = [...todoList];
+
+            if (tableName === SUPABASE_TABLE_READING) {
+                readingList = readingList.filter(i => i.id != id);
+            } else {
+                const childrenIds = todoList.filter(t => t.parent_id == id).map(t => t.id);
+                const idsToRemove = [parseInt(id), ...childrenIds];
+                todoList = todoList.filter(i => !idsToRemove.includes(i.id));
+            }
+            renderAllLists();
+
+            const { error } = await supabase.from(tableName).delete().eq('id', id);
+            if (error) {
+                readingList = originalReadingList;
+                todoList = originalTodoList;
+                renderAllLists();
+                showModal('Failed to delete item.');
+            }
         }
         
         async function removeFromDailyFocus(tableName, id){
             if (!userId) return;
+            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
+            const item = list.find(i => i.id == id);
+            if (item) item.is_daily = false;
+            renderAllLists();
             await supabase.from(tableName).update({ is_daily: false }).eq('id', id);
         }
 
@@ -433,12 +457,9 @@
         function handleDragEnter(e) {
             e.preventDefault();
             if (!draggedItem) return;
-
             const dropTarget = e.target.closest('.list-container, .subtask-container, .bauhaus-item');
             if (!dropTarget) return;
-
             document.querySelectorAll('.subtask-drop-active').forEach(el => el.classList.remove('subtask-drop-active'));
-            
             const isDraggedSubtask = draggedItem.dataset.isSubtask === 'true';
 
             if (draggedItem.dataset.table === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
@@ -486,14 +507,15 @@
                     await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
                 }
             } else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
-                const isMovingToDaily = dropTarget.id === 'daily-focus-list';
-                const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
-                const originalItem = listToCheck.find(i => i.id == draggedId);
-                const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
-                
-                // ✨ DRAG & DROP BUG FIX: Check if the source and destination are different before changing status
                 const sourceContainer = draggedItem.parentElement;
-                if(sourceContainer.id !== dropTarget.id) {
+                
+                // Only update status if moving between main lists
+                if(sourceContainer.id !== dropTarget.id && !draggedItem.dataset.isSubtask) {
+                    const isMovingToDaily = dropTarget.id === 'daily-focus-list';
+                    const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
+                    const originalItem = listToCheck.find(i => i.id == draggedId);
+                    const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
+                
                     if (isMovingToDaily) await supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId);
                     else if (isLeavingDaily) await supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId);
                 }
@@ -501,19 +523,12 @@
                 const indicator = dropTarget.querySelector('.drag-over-indicator');
                 if (indicator) {
                     dropTarget.insertBefore(draggedItem, indicator);
-                    const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
-                    Array.from(dropTarget.children).forEach((itemEl, index) => {
-                        const id = itemEl.dataset.id;
-                        const table = itemEl.dataset.table;
-                        if (id && table && updatesByTable[table]) {
-                            updatesByTable[table].push({ id: id, order: index });
-                        }
-                    });
-
-                    for (const table in updatesByTable) {
-                        if (updatesByTable[table].length > 0) {
-                            await supabase.from(table).upsert(updatesByTable[table]);
-                        }
+                    const updates = Array.from(dropTarget.children)
+                        .map((itemEl, index) => ({ id: itemEl.dataset.id, order: index }))
+                        .filter(item => item.id);
+                    
+                    if (updates.length > 0) {
+                        await supabase.from(draggedTable).upsert(updates);
                     }
                 }
             }
