@@ -206,15 +206,16 @@
         }
 
         function renderReadingList() {
-            // ✨ FIX: Sort a copy of the array, not the original
-            const list = [...readingList].sort((a,b) => a.completed - b.completed || a.order - b.order);
-            readingListElement.innerHTML = '';
-            if (list.length === 0 && userId) { 
-                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`;
-            } else {
-                list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
-            }
-        }
+        // ✨ FIX: Create a shallow copy with [...] before sorting
+        const list = [...readingList].sort((a,b) => a.completed - b.completed || a.order - b.order);
+        
+        readingListElement.innerHTML = '';
+        if (list.length === 0 && userId) { 
+            readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`;
+        } else {
+            list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
+        }
+    }
         
         function renderTodoList() {
             todoListElement.innerHTML = '';
