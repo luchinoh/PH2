@@ -116,7 +116,7 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         const SUPABASE_URL = "https://uqaxcejfjargwoyvaein.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA"; 
         
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos';
@@ -389,8 +389,6 @@
             input.focus();
         }
         
-        // ✨ RELIABILITY FIX: All data-modifying functions now only send commands to the database.
-        // The realtime listener is the single source of truth for updating the UI.
         async function addItem(tableName, text, parentId = null) {
             if (!userId || !text.trim()) return;
             const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
@@ -468,6 +466,7 @@
             }
         }
 
+        // ✨ FINAL RELIABILITY FIX: A simple, robust, non-optimistic approach
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -478,7 +477,7 @@
             const draggedId = draggedItem.dataset.id;
             const draggedTable = draggedItem.dataset.table;
 
-            // Scenario 1: Create subtask from reading item
+            // SCENARIO 1: Create subtask from reading item
             if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
                 const parentId = dropTarget.dataset.parentId;
                 const readingItem = readingList.find(i => i.id == draggedId);
@@ -487,32 +486,44 @@
                     await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
                 }
             } 
-            // Scenario 2: All other drops (reorder, move between lists)
+            // SCENARIO 2: All other drops (reorder, move between lists)
             else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
                 const sourceContainer = draggedItem.parentElement;
-                
+                const promises = [];
+
+                // Update daily status only if moving between the main panels
                 if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
                     const isMovingToDaily = dropTarget.id === 'daily-focus-list';
                     const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
                     const originalItem = listToCheck.find(i => i.id == draggedId);
                     const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
                 
-                    if (isMovingToDaily) await supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId);
-                    else if (isLeavingDaily) await supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId);
+                    if (isMovingToDaily) promises.push(supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId));
+                    else if (isLeavingDaily) promises.push(supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId));
                 }
 
                 const indicator = dropTarget.querySelector('.drag-over-indicator');
                 if (indicator) {
                     dropTarget.insertBefore(draggedItem, indicator);
-                    const updates = Array.from(dropTarget.children)
-                        .map((itemEl, index) => ({ id: itemEl.dataset.id, order: index }))
-                        .filter(item => item.id);
-                    
-                    if (updates.length > 0) {
-                        await supabase.from(draggedTable).upsert(updates);
+                    const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
+                    Array.from(dropTarget.children).forEach((itemEl, index) => {
+                        const id = itemEl.dataset.id;
+                        const table = itemEl.dataset.table;
+                        if (id && table && updatesByTable[table]) {
+                            updatesByTable[table].push({ id: id, order: index });
+                        }
+                    });
+
+                    for (const table in updatesByTable) {
+                        if (updatesByTable[table].length > 0) {
+                            promises.push(supabase.from(table).upsert(updatesByTable[table]));
+                        }
                     }
                 }
+                
+                await Promise.all(promises);
             }
+            
             handleDragEnd();
         }
 
