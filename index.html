@@ -471,12 +471,17 @@
             }
         }
 
-        async function handleDrop(e) {
+async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) { return handleDragEnd(); }
             
-            const dropTarget = e.target.closest('.list-container, .subtask-container');
+            const dropTarget = e.gtarget.closest('.list-container, .subtask-container');
             if (!dropTarget) { return handleDragEnd(); }
+
+            // Determine if the drop is happening inside the Daily Focus column
+            const isDailyDrop = !!dropTarget.closest('#daily-focus-column');
+            // Determine if the item came from the Daily Focus column
+            const isDailyDrag = !!draggedItem.closest('#daily-focus-column');
 
             const draggedId = draggedItem.dataset.id;
             const draggedTable = draggedItem.dataset.table;
@@ -484,6 +489,7 @@
             document.body.style.pointerEvents = 'none';
 
             try {
+                // Case 1: A reading item is being turned into a subtask
                 if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
                     const parentId = dropTarget.dataset.parentId;
                     const readingItem = readingList.find(i => i.id == draggedId);
@@ -492,26 +498,25 @@
                         await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
                     }
                 } 
+                // Case 2: Standard drop within or between the main list areas
                 else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
                     const promises = [];
-                    const sourceContainer = draggedItem.parentElement;
                     
-                    if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
-                        const isMovingToDaily = !!dropTarget.closest('#daily-focus-column');
-                        promises.push(supabase.from(draggedTable).update({ is_daily: isMovingToDaily }).eq('id', draggedId));
+                    // A) Handle moves BETWEEN panels (e.g., Reading List -> Daily Focus)
+                    if (isDailyDrop !== isDailyDrag) {
+                        promises.push(supabase.from(draggedTable).update({ is_daily: isDailyDrop }).eq('id', draggedId));
                     }
 
                     const indicator = dropTarget.querySelector('.drag-over-indicator');
                     if (indicator) {
                         dropTarget.insertBefore(draggedItem, indicator);
                         
-                        // ✅ FIX 4 of 4: Check if the drop target is the Daily Focus list.
-                        // If it is, update 'daily_order'. Otherwise, update the normal 'order'.
-                        const isDaily = !!dropTarget.closest('#daily-focus-column');
-                        const orderColumn = isDaily ? 'daily_order' : 'order';
+                        // B) Determine which column to update based on WHERE THE DROP HAPPENED
+                        const orderColumn = isDailyDrop ? 'daily_order' : 'order';
                         
                         const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
                         
+                        // C) Create a batch of updates for all items in the target list
                         Array.from(dropTarget.children).forEach((itemEl, index) => {
                             const id = itemEl.dataset.id;
                             const table = itemEl.dataset.table;
