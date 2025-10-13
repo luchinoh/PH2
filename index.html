@@ -515,6 +515,7 @@ async function handleDrop(e) {
     const draggedTable = draggedItem.dataset.table;
 
     document.body.style.pointerEvents = 'none';
+    console.debug('handleDrop start', { draggedId, draggedTable, isDailyDrop, isDailyDrag, dropTarget });
 
     try {
         // Case: reading item -> subtask on a todo's subtask container
@@ -530,43 +531,41 @@ async function handleDrop(e) {
         else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
             const promises = [];
 
-            // A) If the item moved between daily/non-daily space, update is_daily flag for the single dragged item
+            // If moved between daily/non-daily, update is_daily for the dragged item
             if (isDailyDrop !== isDailyDrag) {
-                promises.push(supabase.from(draggedTable).update({ is_daily: isDailyDrop }).eq('id', draggedId));
+                console.debug('Updating is_daily for dragged item', { id: draggedId, is_daily: isDailyDrop });
+                promises.push(supabase.from(draggedTable).update({ is_daily: isDailyDrop }).eq('id', Number(draggedId)));
             }
 
+            // If there's an indicator, move the dragged DOM node to its new position
             const indicator = dropTarget.querySelector('.drag-over-indicator');
             if (indicator) {
                 dropTarget.insertBefore(draggedItem, indicator);
+            } else {
+                // if no indicator, append to container (fallback)
+                dropTarget.appendChild(draggedItem);
+            }
 
-                // B) Now build update batches. Only set 'daily_order' if the drop target is inside Daily Focus.
-                // For non-daily containers we only update 'order'.
-                const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
+            // Build list of actual items inside this container to persist order.
+            // We only consider elements that carry data-id and data-table attributes (actual items).
+            const itemEls = Array.from(dropTarget.querySelectorAll('[data-id][data-table]'));
 
-                // We only care about children that are draggable items (have data-id & data-table).
-                Array.from(dropTarget.children).forEach((itemEl, index) => {
-                    const id = itemEl.dataset?.id;
-                    const table = itemEl.dataset?.table;
-                    if (!id || !table) return;
-                    const numericId = Number(id); // ensure numeric id for Supabase
-                    if (!Number.isFinite(numericId)) return;
+            console.debug('Persisting order for items', itemEls.map((el, i) => ({ idx: i, id: el.dataset.id, table: el.dataset.table })));
 
-                    if (isDailyDrop) {
-                        // Update daily_order only (do NOT overwrite 'order' here)
-                        updatesByTable[table].push({ id: numericId, user_id: userId, daily_order: index });
-                    } else {
-                        // Non-daily column: update normal 'order' only
-                        // If this container is a subtask-container, we should keep parent_id unchanged.
-                        updatesByTable[table].push({ id: numericId, user_id: userId, order: index });
-                    }
-                });
+            // Persist each item's order/daily_order using individual updates for reliability.
+            for (let i = 0; i < itemEls.length; i++) {
+                const el = itemEls[i];
+                const id = Number(el.dataset.id);
+                const table = el.dataset.table;
+                if (!Number.isFinite(id) || !table) continue;
 
-                // Perform batch updates per table. Use upsert with onConflict 'id' to update rows.
-                for (const table of Object.keys(updatesByTable)) {
-                    if (updatesByTable[table].length > 0) {
-                        // Use upsert so we only update the provided columns for existing rows.
-                        promises.push(supabase.from(table).upsert(updatesByTable[table], { onConflict: 'id' }));
-                    }
+                if (isDailyDrop) {
+                    // Only update daily_order (do not touch 'order')
+                    promises.push(supabase.from(table).update({ daily_order: i }).eq('id', id));
+                } else {
+                    // Non-daily container (inbox, reading, subtasks) -> update 'order'
+                    // For a subtask container, 'order' applies to subtasks as well.
+                    promises.push(supabase.from(table).update({ order: i }).eq('id', id));
                 }
             }
 
@@ -579,8 +578,10 @@ async function handleDrop(e) {
         handleDragEnd();
         document.body.style.pointerEvents = 'auto';
         await fetchAndRenderAllLists();
+        console.debug('handleDrop finished');
     }
 }
+
 
 
 
