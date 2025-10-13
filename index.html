@@ -466,7 +466,7 @@
             }
         }
 
-        // ✨ FINAL RELIABILITY FIX: A fully reliable, non-optimistic approach
+        // ✨ FINAL RELIABILITY FIX: A simple, robust, non-optimistic approach
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) { return handleDragEnd(); }
@@ -477,56 +477,55 @@
             const draggedId = parseInt(draggedItem.dataset.id, 10);
             const draggedTable = draggedItem.dataset.table;
             
-            // Disable UI during drop to prevent race conditions
             document.body.style.pointerEvents = 'none';
 
-            // SCENARIO 1: Create subtask from reading item
-            if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
-                const parentId = dropTarget.dataset.parentId;
-                const readingItem = readingList.find(i => i.id == draggedId);
-                if (readingItem && parentId) {
-                    const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
-                    await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
-                }
-            } 
-            // SCENARIO 2: All other drops (reorder, move between lists)
-            else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
-                const promises = [];
-                const sourceContainer = draggedItem.parentElement;
-                
-                // Only update daily status if moving between the main panel containers
-                if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
-                    const isMovingToDaily = dropTarget.id === 'daily-focus-list';
-                    if (isMovingToDaily) {
-                        promises.push(supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId));
-                    } else {
-                        promises.push(supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId));
+            try {
+                // SCENARIO 1: Create subtask from reading item
+                if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
+                    const parentId = dropTarget.dataset.parentId;
+                    const readingItem = readingList.find(i => i.id == draggedId);
+                    if (readingItem && parentId) {
+                        const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
+                        await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
                     }
-                }
+                } 
+                // SCENARIO 2: All other drops (reorder, move between lists)
+                else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
+                    const promises = [];
+                    const sourceContainer = draggedItem.parentElement;
+                    
+                    if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
+                        const isMovingToDaily = dropTarget.id === 'daily-focus-list';
+                        if (isMovingToDaily) {
+                            promises.push(supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId));
+                        } else {
+                            promises.push(supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId));
+                        }
+                    }
 
-                const indicator = dropTarget.querySelector('.drag-over-indicator');
-                if (indicator) {
-                    // Temporarily move in the DOM to calculate new order
-                    dropTarget.insertBefore(draggedItem, indicator);
-                    
-                    const updates = Array.from(dropTarget.children)
-                        .map((itemEl, index) => ({ id: parseInt(itemEl.dataset.id, 10), order: index }))
-                        .filter(item => !isNaN(item.id));
-                    
-                    if (updates.length > 0) {
-                        // All items in a subtask list are from 'todos' table
-                        const tableForUpdates = dropTarget.classList.contains('subtask-container') ? SUPABASE_TABLE_TODOS : draggedTable;
-                        promises.push(supabase.from(tableForUpdates).upsert(updates));
+                    const indicator = dropTarget.querySelector('.drag-over-indicator');
+                    if (indicator) {
+                        dropTarget.insertBefore(draggedItem, indicator);
+                        const updates = Array.from(dropTarget.children)
+                            .map((itemEl, index) => ({ id: parseInt(itemEl.dataset.id), order: index }))
+                            .filter(item => !isNaN(item.id));
+                        
+                        if (updates.length > 0) {
+                            const tableForUpdates = draggedTable;
+                            promises.push(supabase.from(tableForUpdates).upsert(updates));
+                        }
                     }
+                    
+                    await Promise.all(promises);
                 }
-                
-                await Promise.all(promises);
+            } catch (error) {
+                console.error("Drop operation failed:", error);
+                showModal("An error occurred. Please refresh the page.");
+            } finally {
+                handleDragEnd();
+                document.body.style.pointerEvents = 'auto';
+                await fetchAndRenderAllLists();
             }
-            
-            handleDragEnd();
-            document.body.style.pointerEvents = 'auto';
-            // Always fetch fresh data after any drop operation completes.
-            await fetchAndRenderAllLists();
         }
 
 
