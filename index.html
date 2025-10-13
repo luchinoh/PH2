@@ -79,10 +79,8 @@
         <h1 class="text-5xl sm:text-6xl text-center mb-12 sm:mb-16 font-bold">Productivity Hub</h1>
         <div id="loading" class="flex justify-center items-center py-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div><p class="ml-3 font-semibold">Connecting...</p></div>
         
-        <!-- ✨ NEW LAYOUT STRUCTURE -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 lg:items-start">
             
-            <!-- Left Column: Daily Focus and Reading List -->
             <div class="flex flex-col gap-8 lg:gap-12">
                 <div id="daily-focus-column" class="bauhaus-panel flex flex-col">
                     <div class="color-block bg-primary-red" style="color: white;">Daily Focus</div>
@@ -100,7 +98,6 @@
                 </div>
             </div>
 
-            <!-- Right Column: Task Inbox -->
             <div id="todo-column" class="bauhaus-panel flex flex-col">
                 <div class="color-block bg-primary-yellow">Task Inbox</div>
                 <div id="todo-list" class="list-container flex-grow p-4 space-y-2"></div>
@@ -112,8 +109,8 @@
 
         </div>
     </div>
-    <div id="message-area" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" style="display: none;"><div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center text-poppins"><p class="font-semibold mb-4" id="modal-text"></p><button onclick="closeModal()" class="bg-primary-blue text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition">OK</button></div></div>
-    <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50" style="display: none;"><div class="bg-white p-8 rounded-xl shadow-2xl max-w-sm w-full text-poppins"><h3 class="text-2xl font-bold mb-6 text-center">Log In</h3><form id="auth-form" onsubmit="handleAuthSubmit(event)"><p id="auth-message" class="text-sm text-center text-red-500 mb-4"></p><input type="email" id="auth-email" placeholder="Email" required class="w-full p-3 mb-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue"><input type="password" id="auth-password" placeholder="Password" required class="w-full p-3 mb-6 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue"><button type="submit" class="w-full bg-primary-blue text-white py-3 rounded-lg font-semibold shadow-md hover:bg-blue-600 transition">Log In</button><button type="button" onclick="closeAuthModal()" class="w-full mt-3 text-sm text-gray-600 py-2 hover:text-charcoal transition">Cancel</button></form></div></div>
+    <div id="message-area" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" style="display: none;"><div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center font-sans"><p class="font-semibold mb-4" id="modal-text"></p><button onclick="closeModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">OK</button></div></div>
+    <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50" style="display: none;"><div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full font-sans"><h3 class="text-2xl font-bold mb-6 text-center">Log In</h3><form id="auth-form" onsubmit="handleAuthSubmit(event)"><p id="auth-message" class="text-sm text-center text-red-500 mb-4"></p><input type="email" id="auth-email" placeholder="Email" required class="w-full p-3 mb-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"><input type="password" id="auth-password" placeholder="Password" required class="w-full p-3 mb-6 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"><button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold shadow-md hover:bg-blue-700 transition">Log In</button><button type="button" onclick="closeAuthModal()" class="w-full mt-3 text-sm text-gray-600 py-2 hover:text-black transition">Cancel</button></form></div></div>
 
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
@@ -253,7 +250,6 @@
 
         function createSubtaskContainer(mainTodo) {
             const subtaskContainer = document.createElement('div');
-            // ✨ FIX: Always hidden by default
             subtaskContainer.className = 'subtask-container hidden';
             subtaskContainer.dataset.parentId = mainTodo.id;
             const children = todoList.filter(t => t.parent_id === mainTodo.id);
@@ -269,9 +265,15 @@
             li.dataset.id = item.id;
             li.dataset.table = tableName;
             li.dataset.order = item.order;
-            li.setAttribute('draggable', !item.completed && !isSubtask);
+            // ✨ SUB-TASK DRAG FIX: All non-completed items are now draggable
+            li.setAttribute('draggable', !item.completed);
             li.className = `bauhaus-item ${item.completed ? 'opacity-50' : ''}`;
             li.dataset.isSubtask = String(isSubtask);
+            if (isSubtask) {
+                const parent = todoList.find(t => t.id == item.parent_id);
+                if (parent) li.dataset.parentId = parent.id;
+            }
+
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragend', handleDragEnd);
             li.addEventListener('dragenter', handleDragEnter);
@@ -280,7 +282,6 @@
             if (!isSubtask && childCount > 0) {
                 const toggleButton = document.createElement('button');
                 toggleButton.className = 'mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
-                // ✨ FIX: SVG defaults to collapsed state
                 toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
                 toggleButton.onclick = function() {
                     const parentElement = this.closest('[data-id]');
@@ -387,9 +388,28 @@
             if (!userId) return;
             await supabase.from(tableName).update({ completed: status }).eq('id', id);
         }
+
+        // ✨ SUB-TASK DELETE FIX: Made this function optimistic for all items
         async function deleteItem(tableName, id) {
             if (!userId) return;
-            await supabase.from(tableName).delete().eq('id', id);
+            const originalReadingList = [...readingList];
+            const originalTodoList = [...todoList];
+
+            if (tableName === SUPABASE_TABLE_READING) {
+                readingList = readingList.filter(i => i.id != id);
+            } else {
+                const childrenIds = todoList.filter(t => t.parent_id == id).map(t => t.id);
+                todoList = todoList.filter(i => i.id != id && !childrenIds.includes(i.id));
+            }
+            renderAllLists();
+
+            const { error } = await supabase.from(tableName).delete().eq('id', id);
+            if (error) {
+                readingList = originalReadingList;
+                todoList = originalTodoList;
+                renderAllLists();
+                showModal('Failed to delete item.');
+            }
         }
         
         async function removeFromDailyFocus(tableName, id){
@@ -408,35 +428,48 @@
             draggedItem = null;
         }
         function handleDragLeave(e) {
-             const target = e.target.closest('.subtask-container');
-             if(target) target.classList.remove('subtask-drop-active');
+             const target = e.target.closest('.subtask-container, .bauhaus-item');
+             if(target && target.classList.contains('subtask-drop-active')) {
+                target.classList.remove('subtask-drop-active');
+             }
         }
         
         function handleDragEnter(e) {
             e.preventDefault();
-            if (!draggedItem || draggedItem.dataset.isSubtask === 'true') return;
-            const dropTarget = e.target.closest('.list-container, .subtask-container');
-            if (!dropTarget) return;
-            document.querySelectorAll('.subtask-drop-active').forEach(el => el.classList.remove('subtask-drop-active'));
-            const draggedTable = draggedItem.dataset.table;
+            if (!draggedItem) return;
 
-            if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
+            const dropTarget = e.target.closest('.list-container, .subtask-container, .bauhaus-item');
+            if (!dropTarget) return;
+
+            document.querySelectorAll('.subtask-drop-active').forEach(el => el.classList.remove('subtask-drop-active'));
+            
+            const isDraggedSubtask = draggedItem.dataset.isSubtask === 'true';
+
+            if (draggedItem.dataset.table === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
                 dropTarget.classList.add('subtask-drop-active');
                 return;
             }
 
-            if (dropTarget.classList.contains('list-container')) {
-                if (draggedTable === 'reading_list' && !['reading-list', 'daily-focus-list'].includes(dropTarget.id)) return;
-                if (draggedTable === 'todos' && dropTarget.id === 'reading-list') return;
-                
-                const targetEl = e.target.closest('[draggable="true"]');
-                const indicator = document.querySelector('.drag-over-indicator') || document.createElement('div');
-                indicator.className = 'drag-over-indicator';
-                if (targetEl?.parentNode === dropTarget) {
-                    const rect = targetEl.getBoundingClientRect();
-                    if (e.clientY - rect.top < rect.height / 2) dropTarget.insertBefore(indicator, targetEl);
-                    else dropTarget.insertBefore(indicator, targetEl.nextSibling);
-                } else { dropTarget.appendChild(indicator); }
+            const container = dropTarget.closest('.list-container, .subtask-container');
+            if (!container) return;
+            
+            // Constrain sub-task dragging
+            if (isDraggedSubtask) {
+                if (!container.classList.contains('subtask-container') || container.dataset.parentId !== draggedItem.dataset.parentId) {
+                    return;
+                }
+            }
+
+            const targetEl = e.target.closest('[draggable="true"]');
+            const indicator = document.querySelector('.drag-over-indicator') || document.createElement('div');
+            indicator.className = 'drag-over-indicator';
+            
+            if (targetEl?.parentNode === container) {
+                const rect = targetEl.getBoundingClientRect();
+                if (e.clientY - rect.top < rect.height / 2) container.insertBefore(indicator, targetEl);
+                else container.insertBefore(indicator, targetEl.nextSibling);
+            } else if (container.classList.contains('list-container')) {
+                container.appendChild(indicator);
             }
         }
 
@@ -457,35 +490,25 @@
                     const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
                     await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
                 }
-            }
-            else if (dropTarget.classList.contains('list-container')) {
+            } else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
                 const isMovingToDaily = dropTarget.id === 'daily-focus-list';
                 const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
                 const originalItem = listToCheck.find(i => i.id == draggedId);
                 const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
 
-                if (isMovingToDaily) {
-                    await supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId);
-                } else if (isLeavingDaily) {
-                    await supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId);
-                }
+                if (isMovingToDaily) await supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId);
+                else if (isLeavingDaily) await supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId);
 
                 const indicator = dropTarget.querySelector('.drag-over-indicator');
                 if (indicator) {
                     dropTarget.insertBefore(draggedItem, indicator);
-                    const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
-                    Array.from(dropTarget.children).forEach((itemEl, index) => {
-                        const id = itemEl.dataset.id;
-                        const table = itemEl.dataset.table;
-                        if (id && table && updatesByTable[table]) {
-                            updatesByTable[table].push({ id: id, order: index });
-                        }
-                    });
-
-                    for (const table in updatesByTable) {
-                        if (updatesByTable[table].length > 0) {
-                            await supabase.from(table).upsert(updatesByTable[table]);
-                        }
+                    const updates = Array.from(dropTarget.children)
+                        .map((itemEl, index) => ({ id: itemEl.dataset.id, order: index }))
+                        .filter(item => item.id);
+                    
+                    if (updates.length > 0) {
+                        const table = dropTarget.closest('.bauhaus-panel').id.includes('todo') ? SUPABASE_TABLE_TODOS : SUPABASE_TABLE_READING;
+                        await supabase.from(table).upsert(updates);
                     }
                 }
             }
