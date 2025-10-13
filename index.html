@@ -533,15 +533,9 @@ if (indicator) {
                 //.eq('user_id', userId)
         );
 
-        const results = await Promise.all(rowPromises);
-        // check for errors and log / surface them
-        results.forEach((res, i) => {
-            if (res.error) {
-                console.error('Order update failed', { table: tableName, row: rows[i], error: res.error });
-                // optional: inform the user
-                showModal('Could not save item order. Check console for details.');
-            }
-        });
+        const res = await supabase.from(table).upsert(updates);
+console.log('upsert response', table, res);
+if (res.error) console.error('Upsert failed', res.error);
     }
 }
 
