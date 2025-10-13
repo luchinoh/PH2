@@ -475,7 +475,8 @@ async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) { return handleDragEnd(); }
             
-            const dropTarget = e.gtarget.closest('.list-container, .subtask-container');
+            // ✅ FIX: Corrected e.gtarget to e.target
+            const dropTarget = e.target.closest('.list-container, .subtask-container');
             if (!dropTarget) { return handleDragEnd(); }
 
             // Determine if the drop is happening inside the Daily Focus column
