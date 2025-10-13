@@ -466,16 +466,19 @@
             }
         }
 
-        // ✨ FINAL RELIABILITY FIX: A simple, robust, non-optimistic approach
+        // ✨ FINAL RELIABILITY FIX: A fully reliable, non-optimistic approach
         async function handleDrop(e) {
             e.preventDefault();
-            if (!draggedItem) return handleDragEnd();
+            if (!draggedItem) { return handleDragEnd(); }
             
             const dropTarget = e.target.closest('.list-container, .subtask-container');
             if (!dropTarget) { return handleDragEnd(); }
 
-            const draggedId = draggedItem.dataset.id;
+            const draggedId = parseInt(draggedItem.dataset.id, 10);
             const draggedTable = draggedItem.dataset.table;
+            
+            // Disable UI during drop to prevent race conditions
+            document.body.style.pointerEvents = 'none';
 
             // SCENARIO 1: Create subtask from reading item
             if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
@@ -488,69 +491,44 @@
             } 
             // SCENARIO 2: All other drops (reorder, move between lists)
             else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
-                const sourceContainer = draggedItem.parentElement;
                 const promises = [];
-
-                // Update daily status only if moving between the main panels
+                const sourceContainer = draggedItem.parentElement;
+                
+                // Only update daily status if moving between the main panel containers
                 if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
                     const isMovingToDaily = dropTarget.id === 'daily-focus-list';
-                    const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
-                    const originalItem = listToCheck.find(i => i.id == draggedId);
-                    const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
-                
-                    if (isMovingToDaily) promises.push(supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId));
-                    else if (isLeavingDaily) promises.push(supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId));
+                    if (isMovingToDaily) {
+                        promises.push(supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId));
+                    } else {
+                        promises.push(supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId));
+                    }
                 }
 
                 const indicator = dropTarget.querySelector('.drag-over-indicator');
-                // --- Replace the "indicator" handling with this robust update flow ---
-if (indicator) {
-    // put the dragged element into the DOM at the indicator
-    dropTarget.insertBefore(draggedItem, indicator);
-
-    // build list of updates (ensure numeric id and order)
-    const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
-    Array.from(dropTarget.children).forEach((itemEl, index) => {
-        const id = itemEl.dataset.id;
-        const table = itemEl.dataset.table;
-        if (id && table && updatesByTable[table]) {
-            updatesByTable[table].push({ id: Number(id), order: index });
-        }
-    });
-
-    // Do per-row updates with error handling (preferred over upsert here)
-    for (const tableName of Object.keys(updatesByTable)) {
-        const rows = updatesByTable[tableName];
-        if (rows.length === 0) continue;
-
-        // Update every row for this table; do them in parallel but capture errors
-        const rowPromises = rows.map(r => 
-            supabase
-                .from(tableName)
-                .update({ order: r.order })
-                .eq('id', r.id)
-                // If your RLS requires user_id in the WHERE clause, append `.eq('user_id', userId)`:
-                //.eq('user_id', userId)
-        );
-
-        const results = await Promise.all(rowPromises);
-        // check for errors and log / surface them
-        results.forEach((res, i) => {
-            if (res.error) {
-                console.error('Order update failed', { table: tableName, row: rows[i], error: res.error });
-                // optional: inform the user
-                showModal('Could not save item order. Check console for details.');
-            }
-        });
-    }
-}
-
+                if (indicator) {
+                    // Temporarily move in the DOM to calculate new order
+                    dropTarget.insertBefore(draggedItem, indicator);
+                    
+                    const updates = Array.from(dropTarget.children)
+                        .map((itemEl, index) => ({ id: parseInt(itemEl.dataset.id, 10), order: index }))
+                        .filter(item => !isNaN(item.id));
+                    
+                    if (updates.length > 0) {
+                        // All items in a subtask list are from 'todos' table
+                        const tableForUpdates = dropTarget.classList.contains('subtask-container') ? SUPABASE_TABLE_TODOS : draggedTable;
+                        promises.push(supabase.from(tableForUpdates).upsert(updates));
+                    }
+                }
                 
                 await Promise.all(promises);
             }
             
             handleDragEnd();
+            document.body.style.pointerEvents = 'auto';
+            // Always fetch fresh data after any drop operation completes.
+            await fetchAndRenderAllLists();
         }
+
 
         // --- Helper Functions and Event Listeners ---
         function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in`; }
