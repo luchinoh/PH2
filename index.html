@@ -467,76 +467,79 @@
         }
 
         // ✨ FINAL RELIABILITY FIX: A fully reliable, non-optimistic approach
-        async function handleDrop(e) {
-            e.preventDefault();
-            if (!draggedItem) { return handleDragEnd(); }
-            
-            const dropTarget = e.target.closest('.list-container, .subtask-container');
-            if (!dropTarget) { return handleDragEnd(); }
+async function handleDrop(e) {
+            e.preventDefault();
+            if (!draggedItem) { return handleDragEnd(); }
+            
+            const dropTarget = e.target.closest('.list-container, .subtask-container');
+            if (!dropTarget) { return handleDragEnd(); }
 
-            const draggedId = draggedItem.dataset.id;
-            const draggedTable = draggedItem.dataset.table;
-            
-            document.body.style.pointerEvents = 'none';
+            const draggedId = draggedItem.dataset.id;
+            const draggedTable = draggedItem.dataset.table;
+            
+            document.body.style.pointerEvents = 'none';
 
-            try {
-                if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
-                    const parentId = dropTarget.dataset.parentId;
-                    const readingItem = readingList.find(i => i.id == draggedId);
-                    if (readingItem && parentId) {
-                        const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
-                        await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
-                    }
-                } 
-                else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
-                    const promises = [];
-                    const sourceContainer = draggedItem.parentElement;
-                    
-                    if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
-                        const isMovingToDaily = dropTarget.id === 'daily-focus-list';
-                        if (isMovingToDaily) {
-                            promises.push(supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId));
-                        } else {
-                            promises.push(supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId));
-                        }
-                    }
+            try {
+                if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
+                    const parentId = dropTarget.dataset.parentId;
+                    const readingItem = readingList.find(i => i.id == draggedId);
+                    if (readingItem && parentId) {
+                        const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
+                        await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
+                    }
+                } 
+                else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
+                    const promises = [];
+                    const sourceContainer = draggedItem.parentElement;
+                    
+                    if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
+                        const isMovingToDaily = dropTarget.id === 'daily-focus-list';
+                        if (isMovingToDaily) {
+                            promises.push(supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId));
+                        } else {
+                            promises.push(supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId));
+                        }
+                    }
 
-                    const indicator = dropTarget.querySelector('.drag-over-indicator');
-                    if (indicator) {
-                        dropTarget.insertBefore(draggedItem, indicator);
-                        
-                        const isDaily = dropTarget.id === 'daily-focus-list';
-                        const orderColumn = isDaily ? 'daily_order' : 'order';
+                    const indicator = dropTarget.querySelector('.drag-over-indicator');
+                    if (indicator) {
+                        dropTarget.insertBefore(draggedItem, indicator);
+                        
+                        const isDaily = dropTarget.id === 'daily-focus-list';
+                        const orderColumn = isDaily ? 'daily_order' : 'order';
 
-                        const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
-                        Array.from(dropTarget.children).forEach((itemEl, index) => {
-                            const id = itemEl.dataset.id;
-                            const table = itemEl.dataset.table;
-                            if (id && table && updatesByTable[table]) {
-                                const update = { id: parseInt(id) };
-                                update[orderColumn] = index;
-                                updatesByTable[table].push(update);
-                            }
-                        });
+                        const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
+                        
+                            // ✨ FIX IS HERE ✨
+                            // We now select only '.bauhaus-item' children to get the correct index.
+                            Array.from(dropTarget.querySelectorAll(':scope > .bauhaus-item')).forEach((itemEl, index) => {
+                            const id = itemEl.dataset.id;
+                            const table = itemEl.dataset.table;
+                            if (id && table && updatesByTable[table]) {
+                                const update = { id: parseInt(id) };
+                                update[orderColumn] = index;
+                                updatesByTable[table].push(update);
+                            }
+                        });
 
-                        for (const table in updatesByTable) {
-                            if (updatesByTable[table].length > 0) {
-                                promises.push(supabase.from(table).upsert(updatesByTable[table]));
-                            }
-                        }
-                    }
-                    
-                    await Promise.all(promises);
-                }
-            } catch (error) {
-                console.error("Drop operation failed:", error);
-                showModal("An error occurred. Please refresh the page.");
-            } finally {
-                handleDragEnd();
-                document.body.style.pointerEvents = 'auto';
-                await fetchAndRenderAllLists();
-            }
-        }
+                        for (const table in updatesByTable) {
+                            if (updatesByTable[table].length > 0) {
+                                promises.push(supabase.from(table).upsert(updatesByTable[table]));
+                            }
+                        }
+                    }
+                    
+                    await Promise.all(promises);
+                }
+            } catch (error) {
+                console.error("Drop operation failed:", error);
+                showModal("An error occurred. Please refresh the page.");
+            } finally {
+                handleDragEnd();
+                document.body.style.pointerEvents = 'auto';
+                await fetchAndRenderAllLists();
+            }
+        }
 
 
         // --- Helper Functions and Event Listeners ---
