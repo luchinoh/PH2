@@ -403,6 +403,7 @@ function createSubtaskContainer(mainTodo) {
             const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
             const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false };
             if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
+            console.log("Attempting to insert:", itemToAdd);
             await supabase.from(tableName).insert(itemToAdd);
         }
 
