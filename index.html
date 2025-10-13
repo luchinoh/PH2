@@ -116,7 +116,7 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         const SUPABASE_URL = "https://uqaxcejfjargwoyvaein.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA"; 
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA";
         
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos';
@@ -397,15 +397,23 @@ function createSubtaskContainer(mainTodo) {
         }
         
         async function addItem(tableName, text, parentId = null) {
-            if (!userId || !text.trim()) return;
-            const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
-            const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
-            const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
-            const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false };
-            if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
-            console.log("Attempting to insert:", itemToAdd);
-            await supabase.from(tableName).insert(itemToAdd);
+        if (!userId || !text.trim()) return;
+        const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
+        const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
+        const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
+        const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false };
+        if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
+
+        // ✨ ADD THIS LINE FOR DEBUGGING
+        console.log("Attempting to insert:", itemToAdd);
+
+        const { error } = await supabase.from(tableName).insert(itemToAdd);
+
+        // Also log any errors directly
+        if (error) {
+            console.error("Supabase insert error:", error);
         }
+    }
 
         async function toggleCompleted(tableName, id, status) {
             if (!userId) return;
