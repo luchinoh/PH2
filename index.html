@@ -515,7 +515,7 @@ async function handleDrop(e) {
     const draggedTable = draggedItem.dataset.table;
 
     document.body.style.pointerEvents = 'none';
-    console.debug('handleDrop start', { draggedId, draggedTable, isDailyDrop, isDailyDrag, dropTarget });
+    console.debug('handleDrop start', { draggedId, draggedTable, isDailyDrop, isDailyDrag });
 
     try {
         // Case: reading item -> subtask on a todo's subtask container
@@ -531,49 +531,41 @@ async function handleDrop(e) {
         else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
             const promises = [];
 
-            // If moved between daily/non-daily, update is_daily for the dragged item
+            // If moved between daily/non-daily, update is_daily flag for dragged item
             if (isDailyDrop !== isDailyDrag) {
-                console.debug('Updating is_daily for dragged item', { id: draggedId, is_daily: isDailyDrop });
-                promises.push(supabase.from(draggedTable).update({ is_daily: isDailyDrop }).eq('id', Number(draggedId)));
+                promises.push(
+                    supabase.from(draggedTable).update({ is_daily: isDailyDrop }).eq('id', draggedId)
+                );
             }
 
-            // If there's an indicator, move the dragged DOM node to its new position
+            // Move DOM node
             const indicator = dropTarget.querySelector('.drag-over-indicator');
-            if (indicator) {
-                dropTarget.insertBefore(draggedItem, indicator);
-            } else {
-                // if no indicator, append to container (fallback)
-                dropTarget.appendChild(draggedItem);
-            }
+            if (indicator) dropTarget.insertBefore(draggedItem, indicator);
+            else dropTarget.appendChild(draggedItem);
 
-            // Build list of actual items inside this container to persist order.
-            // We only consider elements that carry data-id and data-table attributes (actual items).
+            // Gather all real items in container
             const itemEls = Array.from(dropTarget.querySelectorAll('[data-id][data-table]'));
 
-            console.debug('Persisting order for items', itemEls.map((el, i) => ({ idx: i, id: el.dataset.id, table: el.dataset.table })));
+            console.debug('Persisting order for', itemEls.map((el, i) => ({
+                idx: i, id: el.dataset.id, table: el.dataset.table
+            })));
 
-            // Persist each item's order/daily_order using individual updates for reliability.
+            // Persist order/daily_order for each item
             for (let i = 0; i < itemEls.length; i++) {
                 const el = itemEls[i];
-                const id = Number(el.dataset.id);
+                const id = el.dataset.id;
                 const table = el.dataset.table;
-                if (!Number.isFinite(id) || !table) continue;
+                if (!id || !table) continue;
 
-                if (isDailyDrop) {
-                    // Only update daily_order (do not touch 'order')
-                    promises.push(supabase.from(table).update({ daily_order: i }).eq('id', id));
-                } else {
-                    // Non-daily container (inbox, reading, subtasks) -> update 'order'
-                    // For a subtask container, 'order' applies to subtasks as well.
-                    promises.push(supabase.from(table).update({ order: i }).eq('id', id));
-                }
+                const updateData = isDailyDrop ? { daily_order: i } : { order: i };
+                promises.push(supabase.from(table).update(updateData).eq('id', id));
             }
 
             await Promise.all(promises);
         }
     } catch (error) {
         console.error("Drop operation failed:", error);
-        showModal("An error occurred. Your changes may not have been saved.");
+        showModal("An error occurred while saving the new order.");
     } finally {
         handleDragEnd();
         document.body.style.pointerEvents = 'auto';
@@ -581,6 +573,7 @@ async function handleDrop(e) {
         console.debug('handleDrop finished');
     }
 }
+
 
 
 
