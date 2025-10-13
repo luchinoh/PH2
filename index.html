@@ -401,10 +401,14 @@
 
         async function toggleCompleted(tableName, id, status) {
             if (!userId) return;
+            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
+            const item = list.find(i => i.id == id);
+            if (item) item.completed = status;
+            renderAllLists();
             await supabase.from(tableName).update({ completed: status }).eq('id', id);
         }
         
-        // ✨ SMOOTHNESS FIX: All actions are now optimistic
+        // ✨ FINAL SMOOTHNESS FIX: This is now fully optimistic for all item types.
         async function deleteItem(tableName, id) {
             if (!userId) return;
             const originalReadingList = [...readingList];
@@ -509,8 +513,7 @@
             } else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
                 const sourceContainer = draggedItem.parentElement;
                 
-                // Only update status if moving between main lists
-                if(sourceContainer.id !== dropTarget.id && !draggedItem.dataset.isSubtask) {
+                if(sourceContainer !== dropTarget && !draggedItem.dataset.isSubtask) {
                     const isMovingToDaily = dropTarget.id === 'daily-focus-list';
                     const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
                     const originalItem = listToCheck.find(i => i.id == draggedId);
@@ -523,12 +526,19 @@
                 const indicator = dropTarget.querySelector('.drag-over-indicator');
                 if (indicator) {
                     dropTarget.insertBefore(draggedItem, indicator);
-                    const updates = Array.from(dropTarget.children)
-                        .map((itemEl, index) => ({ id: itemEl.dataset.id, order: index }))
-                        .filter(item => item.id);
-                    
-                    if (updates.length > 0) {
-                        await supabase.from(draggedTable).upsert(updates);
+                    const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
+                    Array.from(dropTarget.children).forEach((itemEl, index) => {
+                        const id = itemEl.dataset.id;
+                        const table = itemEl.dataset.table;
+                        if (id && table && updatesByTable[table]) {
+                            updatesByTable[table].push({ id: id, order: index });
+                        }
+                    });
+
+                    for (const table in updatesByTable) {
+                        if (updatesByTable[table].length > 0) {
+                            await supabase.from(table).upsert(updatesByTable[table]);
+                        }
                     }
                 }
             }
