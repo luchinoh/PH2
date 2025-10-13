@@ -389,6 +389,7 @@
             input.focus();
         }
         
+        // ✨ FINAL SMOOTHNESS FIX: All actions now wait for the DB, then let the realtime listener update the UI.
         async function addItem(tableName, text, parentId = null) {
             if (!userId || !text.trim()) return;
             const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
@@ -401,43 +402,16 @@
 
         async function toggleCompleted(tableName, id, status) {
             if (!userId) return;
-            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-            const item = list.find(i => i.id == id);
-            if (item) item.completed = status;
-            renderAllLists();
             await supabase.from(tableName).update({ completed: status }).eq('id', id);
         }
         
-        // ✨ FINAL SMOOTHNESS FIX: This is now fully optimistic for all item types.
         async function deleteItem(tableName, id) {
             if (!userId) return;
-            const originalReadingList = [...readingList];
-            const originalTodoList = [...todoList];
-
-            if (tableName === SUPABASE_TABLE_READING) {
-                readingList = readingList.filter(i => i.id != id);
-            } else {
-                const childrenIds = todoList.filter(t => t.parent_id == id).map(t => t.id);
-                const idsToRemove = [parseInt(id), ...childrenIds];
-                todoList = todoList.filter(i => !idsToRemove.includes(i.id));
-            }
-            renderAllLists();
-
-            const { error } = await supabase.from(tableName).delete().eq('id', id);
-            if (error) {
-                readingList = originalReadingList;
-                todoList = originalTodoList;
-                renderAllLists();
-                showModal('Failed to delete item.');
-            }
+            await supabase.from(tableName).delete().eq('id', id);
         }
         
         async function removeFromDailyFocus(tableName, id){
             if (!userId) return;
-            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-            const item = list.find(i => i.id == id);
-            if (item) item.is_daily = false;
-            renderAllLists();
             await supabase.from(tableName).update({ is_daily: false }).eq('id', id);
         }
 
@@ -493,16 +467,18 @@
             }
         }
 
+        // ✨ FINAL DRAG & DROP FIX: A fully reliable, non-optimistic approach
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
             
             const dropTarget = e.target.closest('.list-container, .subtask-container');
-            if (!dropTarget) return handleDragEnd();
+            if (!dropTarget) { return handleDragEnd(); }
 
             const draggedId = draggedItem.dataset.id;
             const draggedTable = draggedItem.dataset.table;
 
+            // Scenario 1: Create subtask from reading item
             if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
                 const parentId = dropTarget.dataset.parentId;
                 const readingItem = readingList.find(i => i.id == draggedId);
@@ -510,10 +486,13 @@
                     const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
                     await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
                 }
-            } else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
+            } 
+            // Scenario 2: All other drops (reorder, move between lists)
+            else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
                 const sourceContainer = draggedItem.parentElement;
-                
-                if(sourceContainer !== dropTarget && !draggedItem.dataset.isSubtask) {
+
+                // Only update daily status if moving between the main panel containers
+                if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
                     const isMovingToDaily = dropTarget.id === 'daily-focus-list';
                     const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
                     const originalItem = listToCheck.find(i => i.id == draggedId);
@@ -526,19 +505,13 @@
                 const indicator = dropTarget.querySelector('.drag-over-indicator');
                 if (indicator) {
                     dropTarget.insertBefore(draggedItem, indicator);
-                    const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
-                    Array.from(dropTarget.children).forEach((itemEl, index) => {
-                        const id = itemEl.dataset.id;
-                        const table = itemEl.dataset.table;
-                        if (id && table && updatesByTable[table]) {
-                            updatesByTable[table].push({ id: id, order: index });
-                        }
-                    });
-
-                    for (const table in updatesByTable) {
-                        if (updatesByTable[table].length > 0) {
-                            await supabase.from(table).upsert(updatesByTable[table]);
-                        }
+                    const updates = Array.from(dropTarget.children)
+                        .map((itemEl, index) => ({ id: itemEl.dataset.id, order: index }))
+                        .filter(item => item.id);
+                    
+                    if (updates.length > 0) {
+                        const table = updates[0].id.startsWith(SUPABASE_TABLE_READING) ? SUPABASE_TABLE_READING : SUPABASE_TABLE_TODOS;
+                        await supabase.from(draggedTable).upsert(updates);
                     }
                 }
             }
