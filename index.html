@@ -153,7 +153,24 @@
                 
                 supabase.channel(channelId).on('postgres_changes', 
                     { event: '*', schema: 'public', table: tableName, filter: `user_id=eq.${userId}` },
-                    () => fetchAndRenderAllLists()
+                    (payload) => {
+                         // Instead of a full refetch, intelligently update the local lists
+                        if (payload.eventType === 'INSERT') {
+                            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
+                            list.push(payload.new);
+                        } else if (payload.eventType === 'UPDATE') {
+                            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
+                            const index = list.findIndex(i => i.id === payload.new.id);
+                            if (index !== -1) list[index] = payload.new;
+                        } else if (payload.eventType === 'DELETE') {
+                            if (tableName === SUPABASE_TABLE_READING) {
+                                readingList = readingList.filter(i => i.id !== payload.old.id);
+                            } else {
+                                todoList = todoList.filter(i => i.id !== payload.old.id);
+                            }
+                        }
+                        renderAllLists();
+                    }
                 ).subscribe();
             });
         }
@@ -340,6 +357,7 @@
             input.focus();
         }
         
+        // ✨ SMOOTHNESS FIX: All data functions are now optimistic
         async function addItem(tableName, text, parentId = null) {
             if (!userId || !text.trim()) return;
             const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
@@ -347,20 +365,42 @@
             const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
             const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false };
             if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
-            await supabase.from(tableName).insert(itemToAdd);
+
+            // Optimistic Update: Add to local list and re-render immediately
+            const { data, error } = await supabase.from(tableName).insert(itemToAdd).select().single();
+            if (error) {
+                showModal('Failed to add item.');
+            } else {
+                list.push(data);
+                renderAllLists();
+            }
         }
 
         async function toggleCompleted(tableName, id, status) {
             if (!userId) return;
+            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
+            const item = list.find(i => i.id === id);
+            if (item) item.completed = status;
+            renderAllLists();
             await supabase.from(tableName).update({ completed: status }).eq('id', id);
         }
         async function deleteItem(tableName, id) {
             if (!userId) return;
+            if (tableName === SUPABASE_TABLE_READING) {
+                readingList = readingList.filter(i => i.id !== id);
+            } else {
+                todoList = todoList.filter(i => i.id !== id);
+            }
+            renderAllLists();
             await supabase.from(tableName).delete().eq('id', id);
         }
         
         async function removeFromDailyFocus(tableName, id){
             if (!userId) return;
+            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
+            const item = list.find(i => i.id == id);
+            if (item) item.is_daily = false;
+            renderAllLists();
             await supabase.from(tableName).update({ is_daily: false }).eq('id', id);
         }
 
@@ -382,12 +422,9 @@
         function handleDragEnter(e) {
             e.preventDefault();
             if (!draggedItem || draggedItem.dataset.isSubtask === 'true') return;
-            
             const dropTarget = e.target.closest('.list-container, .subtask-container');
             if (!dropTarget) return;
-
             document.querySelectorAll('.subtask-drop-active').forEach(el => el.classList.remove('subtask-drop-active'));
-            
             const draggedTable = draggedItem.dataset.table;
 
             if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
@@ -396,14 +433,13 @@
             }
 
             if (dropTarget.classList.contains('list-container')) {
-                if (draggedTable === 'reading_list' && dropTarget.id !== 'reading-list' && dropTarget.id !== 'daily-focus-list') return;
+                if (draggedTable === 'reading_list' && !['reading-list', 'daily-focus-list'].includes(dropTarget.id)) return;
                 if (draggedTable === 'todos' && dropTarget.id === 'reading-list') return;
                 
                 const targetEl = e.target.closest('[draggable="true"]');
                 const indicator = document.querySelector('.drag-over-indicator') || document.createElement('div');
                 indicator.className = 'drag-over-indicator';
                 indicator.style.borderColor = dropTarget.id.includes('daily') ? '#3498db' : '#2ecc71';
-
                 if (targetEl?.parentNode === dropTarget) {
                     const rect = targetEl.getBoundingClientRect();
                     if (e.clientY - rect.top < rect.height / 2) dropTarget.insertBefore(indicator, targetEl);
@@ -412,7 +448,7 @@
             }
         }
 
-        // ✨ DRAG & DROP FIX V3: Rewritten to be simple, robust, and reliable.
+        // ✨ FINAL DRAG & DROP FIX: A simple, reliable, non-optimistic approach
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -431,29 +467,24 @@
                     const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
                     await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
                 }
-                return handleDragEnd();
             }
 
             // SCENARIO 2: Reorder or move between lists
-            if (dropTarget.classList.contains('list-container')) {
+            else if (dropTarget.classList.contains('list-container')) {
                 const isMovingToDaily = dropTarget.id === 'daily-focus-list';
                 const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
                 const originalItem = listToCheck.find(i => i.id == draggedId);
                 const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
 
-                let statusUpdatePromise = null;
                 if (isMovingToDaily) {
-                    statusUpdatePromise = supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId);
+                    await supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId);
                 } else if (isLeavingDaily) {
-                    statusUpdatePromise = supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId);
+                    await supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId);
                 }
 
-                let reorderPromise = null;
                 const indicator = dropTarget.querySelector('.drag-over-indicator');
                 if (indicator) {
-                    // Temporarily move the item in the DOM to calculate the correct new order
                     dropTarget.insertBefore(draggedItem, indicator);
-                    
                     const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
                     Array.from(dropTarget.children).forEach((itemEl, index) => {
                         const id = itemEl.dataset.id;
@@ -463,17 +494,12 @@
                         }
                     });
 
-                    const reorderPromises = Object.keys(updatesByTable)
-                        .filter(table => updatesByTable[table].length > 0)
-                        .map(table => supabase.from(table).upsert(updatesByTable[table]));
-                    
-                    if (reorderPromises.length > 0) {
-                        reorderPromise = Promise.all(reorderPromises);
+                    for (const table in updatesByTable) {
+                        if (updatesByTable[table].length > 0) {
+                            await supabase.from(table).upsert(updatesByTable[table]);
+                        }
                     }
                 }
-                
-                await Promise.all([statusUpdatePromise, reorderPromise].filter(Boolean));
-                // We no longer call fetch here. We let the realtime listener handle it.
             }
             
             handleDragEnd();
@@ -512,6 +538,4 @@
     </script>
 </body>
 </html>
-
-
 
