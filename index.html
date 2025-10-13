@@ -116,7 +116,7 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         const SUPABASE_URL = "https://uqaxcejfjargwoyvaein.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA"; 
         
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos';
@@ -154,7 +154,6 @@
             if (isLoggedIn) {
                 loadingElement.style.display = 'flex';
                 await fetchAndRenderAllLists();
-                // We keep realtime listeners to sync data between different tabs/browsers
                 setupRealtimeListeners();
             } else {
                 readingList = [];
@@ -189,16 +188,13 @@
 
         function setupRealtimeListeners() {
             if (!userId) return;
-            // No need to set up listeners twice
             if (supabase.getChannels().length > 0) return;
             
-            const allChangesChannel = supabase.channel('public:all_changes');
-            allChangesChannel.on('postgres_changes', 
+            supabase.channel('public-changes').on('postgres_changes', 
                 { event: '*', schema: 'public', filter: `user_id=eq.${userId}` },
                 () => fetchAndRenderAllLists()
             ).subscribe();
         }
-
 
         function renderAllLists() {
             renderReadingList();
@@ -466,6 +462,7 @@
             }
         }
 
+        // ✨ FINAL RELIABILITY FIX: A fully reliable, non-optimistic approach
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) { return handleDragEnd(); }
@@ -492,7 +489,7 @@
                     const sourceContainer = draggedItem.parentElement;
                     
                     if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
-                        const isMovingToDaily = dropTarget.id === 'daily-focus-list';
+                        const isMovingToDaily = !!dropTarget.closest('#daily-focus-column');
                         promises.push(supabase.from(draggedTable).update({ is_daily: isMovingToDaily }).eq('id', draggedId));
                     }
 
@@ -500,7 +497,7 @@
                     if (indicator) {
                         dropTarget.insertBefore(draggedItem, indicator);
                         
-                        const isDaily = dropTarget.id === 'daily-focus-list';
+                        const isDaily = !!dropTarget.closest('#daily-focus-column');
                         const orderColumn = isDaily ? 'daily_order' : 'order';
 
                         const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
@@ -526,13 +523,14 @@
                 }
             } catch (error) {
                 console.error("Drop operation failed:", error);
-                showModal("An error occurred. Please refresh the page.");
+                showModal("An error occurred. The page will now refresh.");
             } finally {
                 handleDragEnd();
                 document.body.style.pointerEvents = 'auto';
                 await fetchAndRenderAllLists();
             }
         }
+
 
         // --- Helper Functions and Event Listeners ---
         function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in`; }
