@@ -116,7 +116,7 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         const SUPABASE_URL = "https://uqaxcejfjargwoyvaein.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA"; 
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA";
         
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos';
@@ -389,7 +389,8 @@
             input.focus();
         }
         
-        // ✨ FINAL SMOOTHNESS FIX: All actions now wait for the DB, then let the realtime listener update the UI.
+        // ✨ RELIABILITY FIX: All data-modifying functions now only send commands to the database.
+        // The realtime listener is the single source of truth for updating the UI.
         async function addItem(tableName, text, parentId = null) {
             if (!userId || !text.trim()) return;
             const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
@@ -467,7 +468,6 @@
             }
         }
 
-        // ✨ FINAL DRAG & DROP FIX: A fully reliable, non-optimistic approach
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -490,8 +490,7 @@
             // Scenario 2: All other drops (reorder, move between lists)
             else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
                 const sourceContainer = draggedItem.parentElement;
-
-                // Only update daily status if moving between the main panel containers
+                
                 if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
                     const isMovingToDaily = dropTarget.id === 'daily-focus-list';
                     const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
@@ -510,7 +509,6 @@
                         .filter(item => item.id);
                     
                     if (updates.length > 0) {
-                        const table = updates[0].id.startsWith(SUPABASE_TABLE_READING) ? SUPABASE_TABLE_READING : SUPABASE_TABLE_TODOS;
                         await supabase.from(draggedTable).upsert(updates);
                     }
                 }
