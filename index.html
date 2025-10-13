@@ -112,11 +112,11 @@
     <div id="message-area" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" style="display: none;"><div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center font-sans"><p class="font-semibold mb-4" id="modal-text"></p><button onclick="closeModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">OK</button></div></div>
     <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50" style="display: none;"><div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full font-sans"><h3 class="text-2xl font-bold mb-6 text-center">Log In</h3><form id="auth-form" onsubmit="handleAuthSubmit(event)"><p id="auth-message" class="text-sm text-center text-red-500 mb-4"></p><input type="email" id="auth-email" placeholder="Email" required class="w-full p-3 mb-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"><input type="password" id="auth-password" placeholder="Password" required class="w-full p-3 mb-6 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"><button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold shadow-md hover:bg-blue-700 transition">Log In</button><button type="button" onclick="closeAuthModal()" class="w-full mt-3 text-sm text-gray-600 py-2 hover:text-black transition">Cancel</button></form></div></div>
 
-    <script type="module">
+   <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         const SUPABASE_URL = "https://uqaxcejfjargwoyvaein.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA"; 
         
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos';
@@ -188,10 +188,14 @@
 
         function setupRealtimeListeners() {
             if (!userId) return;
-            if (supabase.getChannels().length > 0) return;
+            // Clear existing channels to prevent duplicates on re-login
+            supabase.getChannels().forEach(channel => channel.unsubscribe());
             
             supabase.channel('public-changes').on('postgres_changes', 
-                { event: '*', schema: 'public', filter: `user_id=eq.${userId}` },
+                { event: '*', schema: 'public', table: SUPABASE_TABLE_READING, filter: `user_id=eq.${userId}` },
+                () => fetchAndRenderAllLists()
+            ).on('postgres_changes', 
+                { event: '*', schema: 'public', table: SUPABASE_TABLE_TODOS, filter: `user_id=eq.${userId}` },
                 () => fetchAndRenderAllLists()
             ).subscribe();
         }
@@ -230,7 +234,6 @@
             dailyFocusListElement.innerHTML = '';
             const dailyReading = readingList.filter(item => item.is_daily);
             const dailyTodos = todoList.filter(item => item.is_daily && !item.parent_id);
-            // ✅ FIX: Sort by the existing 'order' column instead of the missing 'daily_order' column.
             const dailyItems = [...dailyReading, ...dailyTodos].sort((a,b) => (a.order || 0) - (b.order || 0));
 
             if (dailyItems.length === 0 && userId) { dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Drag items here for today.</p>`; }
@@ -391,7 +394,6 @@
             const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
             const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
             const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
-            // ✅ FIX: Removed the 'daily_order' property from the new item object.
             const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false };
             if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
             await supabase.from(tableName).insert(itemToAdd);
@@ -404,6 +406,10 @@
         
         async function deleteItem(tableName, id) {
             if (!userId) return;
+            // Also delete children if it's a parent todo
+            if (tableName === SUPABASE_TABLE_TODOS) {
+                 await supabase.from(tableName).delete().eq('parent_id', id);
+            }
             await supabase.from(tableName).delete().eq('id', id);
         }
         
@@ -498,16 +504,15 @@
                     if (indicator) {
                         dropTarget.insertBefore(draggedItem, indicator);
                         
-                        // ✅ FIX: Always use the 'order' column for reordering, regardless of the list.
                         const orderColumn = 'order';
-
                         const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
                         
                         Array.from(dropTarget.children).forEach((itemEl, index) => {
                             const id = itemEl.dataset.id;
                             const table = itemEl.dataset.table;
                             if (id && table && updatesByTable[table]) {
-                                const update = { id: parseInt(id) };
+                                // ✅ FIX: Add user_id to the payload to satisfy RLS policies
+                                const update = { id: parseInt(id), user_id: userId };
                                 update[orderColumn] = index;
                                 updatesByTable[table].push(update);
                             }
@@ -524,10 +529,12 @@
                 }
             } catch (error) {
                 console.error("Drop operation failed:", error);
-                showModal("An error occurred. The page will now refresh.");
+                showModal("An error occurred. Your changes may not have been saved.");
             } finally {
                 handleDragEnd();
                 document.body.style.pointerEvents = 'auto';
+                // Fetching is now handled by the realtime listener, but we'll call it
+                // here as a fallback to ensure UI consistency immediately after a drop.
                 await fetchAndRenderAllLists();
             }
         }
@@ -538,6 +545,14 @@
         function updateFormState(isLoggedIn) { document.querySelectorAll('#add-reading-form input, #add-reading-form button, #add-todo-form input, #add-todo-form button').forEach(el => el.disabled = !isLoggedIn); document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Author (Year): *Title*" : "Please log in"; document.getElementById('new-todo-text').placeholder = isLoggedIn ? "Buy milk, etc." : "Please log in"; }
         async function handleAuthSubmit(e) { e.preventDefault(); const email = document.getElementById('auth-email').value, password = document.getElementById('auth-password').value; const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) document.getElementById('auth-message').textContent = error.message; else closeAuthModal(); }
         async function handleLogout() { await supabase.auth.signOut(); }
+        document.getElementById('auth-toggle-btn').addEventListener('click', async () => {
+             const { data: { session } } = await supabase.auth.getSession();
+             if (session) {
+                 await handleLogout();
+             } else {
+                 openAuthModal();
+             }
+        });
         function openAuthModal() { document.getElementById('auth-modal').style.display = 'flex'; }
         function closeAuthModal() { document.getElementById('auth-modal').style.display = 'none'; }
         function showModal(message) { document.getElementById('modal-text').textContent = message; document.getElementById('message-area').style.display = 'flex'; }
@@ -545,8 +560,18 @@
         Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
         ['dragover'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
-        document.getElementById('add-reading-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_READING, document.getElementById('new-reading-text').value); document.getElementById('new-reading-text').value = ''; });
-        document.getElementById('add-todo-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_TODOS, document.getElementById('new-todo-text').value); document.getElementById('new-todo-text').value = ''; });
+        document.getElementById('add-reading-form').addEventListener('submit', e => { 
+            e.preventDefault(); 
+            const input = document.getElementById('new-reading-text');
+            addItem(SUPABASE_TABLE_READING, input.value); 
+            input.value = ''; // ✨ Bonus polish: Clear input after submit
+        });
+        document.getElementById('add-todo-form').addEventListener('submit', e => { 
+            e.preventDefault(); 
+            const input = document.getElementById('new-todo-text');
+            addItem(SUPABASE_TABLE_TODOS, input.value); 
+            input.value = ''; // ✨ Bonus polish: Clear input after submit
+        });
         const readingListDropZone = document.getElementById('reading-column');
         ['dragenter', 'dragover'].forEach(evt => readingListDropZone.addEventListener(evt, e => { e.preventDefault(); if (e.dataTransfer?.types?.includes('Files')) readingListDropZone.classList.add('file-drag-active'); }));
         ['dragleave', 'drop'].forEach(evt => readingListDropZone.addEventListener(evt, e => { e.preventDefault(); readingListDropZone.classList.remove('file-drag-active'); }));
