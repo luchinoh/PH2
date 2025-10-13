@@ -154,14 +154,16 @@
                 supabase.channel(channelId).on('postgres_changes', 
                     { event: '*', schema: 'public', table: tableName, filter: `user_id=eq.${userId}` },
                     (payload) => {
-                         // Instead of a full refetch, intelligently update the local lists
                         if (payload.eventType === 'INSERT') {
                             const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-                            list.push(payload.new);
+                            // ✨ FIX: Only add the item if it doesn't already exist locally
+                            if (!list.some(item => item.id === payload.new.id)) {
+                                list.push(payload.new);
+                            }
                         } else if (payload.eventType === 'UPDATE') {
                             const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
                             const index = list.findIndex(i => i.id === payload.new.id);
-                            if (index !== -1) list[index] = payload.new;
+                            if (index !== -1) list[index] = { ...list[index], ...payload.new };
                         } else if (payload.eventType === 'DELETE') {
                             if (tableName === SUPABASE_TABLE_READING) {
                                 readingList = readingList.filter(i => i.id !== payload.old.id);
@@ -357,7 +359,6 @@
             input.focus();
         }
         
-        // ✨ SMOOTHNESS FIX: All data functions are now optimistic
         async function addItem(tableName, text, parentId = null) {
             if (!userId || !text.trim()) return;
             const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
@@ -366,30 +367,31 @@
             const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false };
             if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
 
-            // Optimistic Update: Add to local list and re-render immediately
-            const { data, error } = await supabase.from(tableName).insert(itemToAdd).select().single();
+            // ✨ FIX: This no longer optimistically updates, it just sends the data.
+            // The realtime listener is now the only source of truth for updates.
+            const { error } = await supabase.from(tableName).insert(itemToAdd);
             if (error) {
                 showModal('Failed to add item.');
-            } else {
-                list.push(data);
-                renderAllLists();
+                fetchAndRenderAllLists(); // Re-sync on error
             }
         }
 
         async function toggleCompleted(tableName, id, status) {
             if (!userId) return;
+            // Optimistic update
             const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-            const item = list.find(i => i.id === id);
+            const item = list.find(i => i.id == id);
             if (item) item.completed = status;
             renderAllLists();
             await supabase.from(tableName).update({ completed: status }).eq('id', id);
         }
         async function deleteItem(tableName, id) {
             if (!userId) return;
+            // Optimistic update
             if (tableName === SUPABASE_TABLE_READING) {
-                readingList = readingList.filter(i => i.id !== id);
+                readingList = readingList.filter(i => i.id != id);
             } else {
-                todoList = todoList.filter(i => i.id !== id);
+                todoList = todoList.filter(i => i.id != id);
             }
             renderAllLists();
             await supabase.from(tableName).delete().eq('id', id);
@@ -397,6 +399,7 @@
         
         async function removeFromDailyFocus(tableName, id){
             if (!userId) return;
+            // Optimistic update
             const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
             const item = list.find(i => i.id == id);
             if (item) item.is_daily = false;
@@ -448,7 +451,6 @@
             }
         }
 
-        // ✨ FINAL DRAG & DROP FIX: A simple, reliable, non-optimistic approach
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) return handleDragEnd();
@@ -459,7 +461,6 @@
             const draggedId = draggedItem.dataset.id;
             const draggedTable = draggedItem.dataset.table;
 
-            // SCENARIO 1: Create subtask from reading item
             if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
                 const parentId = dropTarget.dataset.parentId;
                 const readingItem = readingList.find(i => i.id == draggedId);
@@ -468,8 +469,6 @@
                     await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
                 }
             }
-
-            // SCENARIO 2: Reorder or move between lists
             else if (dropTarget.classList.contains('list-container')) {
                 const isMovingToDaily = dropTarget.id === 'daily-focus-list';
                 const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
@@ -501,7 +500,6 @@
                     }
                 }
             }
-            
             handleDragEnd();
         }
 
