@@ -233,7 +233,8 @@
             dailyFocusListElement.innerHTML = '';
             const dailyReading = readingList.filter(item => item.is_daily);
             const dailyTodos = todoList.filter(item => item.is_daily && !item.parent_id);
-            const dailyItems = [...dailyReading, ...dailyTodos].sort((a,b) => (a.order || 0) - (b.order || 0));
+            // ✅ FIX 1 of 4: Sort the Daily Focus list by its own 'daily_order' column.
+            const dailyItems = [...dailyReading, ...dailyTodos].sort((a,b) => (a.daily_order ?? Infinity) - (b.daily_order ?? Infinity));
 
             if (dailyItems.length === 0 && userId) { dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Drag items here for today.</p>`; }
 
@@ -393,7 +394,8 @@
             const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
             const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
             const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
-            const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false };
+            // ✅ FIX 2 of 4: Initialize new items with a null daily_order.
+            const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false, daily_order: null };
             if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
             await supabase.from(tableName).insert(itemToAdd);
         }
@@ -413,7 +415,8 @@
         
         async function removeFromDailyFocus(tableName, id){
             if (!userId) return;
-            await supabase.from(tableName).update({ is_daily: false }).eq('id', id);
+            // ✅ FIX 3 of 4: When removing from daily focus, also clear its daily_order.
+            await supabase.from(tableName).update({ is_daily: false, daily_order: null }).eq('id', id);
         }
 
         let draggedItem = null;
@@ -502,14 +505,17 @@
                     if (indicator) {
                         dropTarget.insertBefore(draggedItem, indicator);
                         
-                        const orderColumn = 'order';
+                        // ✅ FIX 4 of 4: Check if the drop target is the Daily Focus list.
+                        // If it is, update 'daily_order'. Otherwise, update the normal 'order'.
+                        const isDaily = !!dropTarget.closest('#daily-focus-column');
+                        const orderColumn = isDaily ? 'daily_order' : 'order';
+                        
                         const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
                         
                         Array.from(dropTarget.children).forEach((itemEl, index) => {
                             const id = itemEl.dataset.id;
                             const table = itemEl.dataset.table;
                             if (id && table && updatesByTable[table]) {
-                                // ✅ FIX: Pass the 'id' as a string, not a number.
                                 const update = { id: id, user_id: userId };
                                 update[orderColumn] = index;
                                 updatesByTable[table].push(update);
