@@ -116,7 +116,7 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
         const SUPABASE_URL = "https://uqaxcejfjargwoyvaein.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA"; 
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxYXhjZWpmamFyZ3dveXZhZWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxODA5MDEsImV4cCI6MjA3NTc1NjkwMX0.N7fLXEtOhE6cS82KbsCFELXLaulOUXBYqw7QPC8sIAA";
         
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos';
@@ -230,20 +230,21 @@
             dailyFocusListElement.innerHTML = '';
             const dailyReading = readingList.filter(item => item.is_daily);
             const dailyTodos = todoList.filter(item => item.is_daily && !item.parent_id);
-            const dailyItems = [...dailyReading, ...dailyTodos].sort((a,b) => (a.daily_order || 0) - (b.daily_order || 0));
+            // ✅ FIX: Sort by the existing 'order' column instead of the missing 'daily_order' column.
+            const dailyItems = [...dailyReading, ...dailyTodos].sort((a,b) => (a.order || 0) - (b.order || 0));
 
             if (dailyItems.length === 0 && userId) { dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Drag items here for today.</p>`; }
 
             dailyItems.forEach(item => {
-                 const isTodo = 'parent_id' in item;
-                 const childCount = isTodo ? todoList.filter(t => t.parent_id === item.id).length : 0;
-                 const tableName = isTodo ? SUPABASE_TABLE_TODOS : SUPABASE_TABLE_READING;
-                 const mainLi = createItemElement(item, tableName, false, childCount, true);
-                 dailyFocusListElement.appendChild(mainLi);
-                 if(isTodo && childCount > 0){
-                     const subtaskContainer = createSubtaskContainer(item);
-                     dailyFocusListElement.appendChild(subtaskContainer);
-                 }
+                const isTodo = 'parent_id' in item;
+                const childCount = isTodo ? todoList.filter(t => t.parent_id === item.id).length : 0;
+                const tableName = isTodo ? SUPABASE_TABLE_TODOS : SUPABASE_TABLE_READING;
+                const mainLi = createItemElement(item, tableName, false, childCount, true);
+                dailyFocusListElement.appendChild(mainLi);
+                if(isTodo && childCount > 0){
+                    const subtaskContainer = createSubtaskContainer(item);
+                    dailyFocusListElement.appendChild(subtaskContainer);
+                }
             });
         }
 
@@ -385,13 +386,13 @@
             input.focus();
         }
         
-        // ✨ All data functions now simply await the database call. The realtime listener handles updates.
         async function addItem(tableName, text, parentId = null) {
             if (!userId || !text.trim()) return;
             const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
             const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
             const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
-            const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false, daily_order: null };
+            // ✅ FIX: Removed the 'daily_order' property from the new item object.
+            const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false };
             if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
             await supabase.from(tableName).insert(itemToAdd);
         }
@@ -463,7 +464,6 @@
             }
         }
 
-        // ✨ FINAL RELIABILITY FIX: A fully robust, non-optimistic approach
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) { return handleDragEnd(); }
@@ -498,8 +498,8 @@
                     if (indicator) {
                         dropTarget.insertBefore(draggedItem, indicator);
                         
-                        const isDaily = !!dropTarget.closest('#daily-focus-column');
-                        const orderColumn = isDaily ? 'daily_order' : 'order';
+                        // ✅ FIX: Always use the 'order' column for reordering, regardless of the list.
+                        const orderColumn = 'order';
 
                         const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
                         
@@ -528,7 +528,6 @@
             } finally {
                 handleDragEnd();
                 document.body.style.pointerEvents = 'auto';
-                // No optimistic update. We wait for the DB operations, then fetch the truth.
                 await fetchAndRenderAllLists();
             }
         }
@@ -546,8 +545,8 @@
         Object.assign(window, { handleAuthSubmit, openAuthModal, closeModal, closeAuthModal });
         ['dragover'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
         document.body.addEventListener('drop', handleDrop);
-        document.getElementById('add-reading-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_READING, document.getElementById('new-reading-text').value); });
-        document.getElementById('add-todo-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_TODOS, document.getElementById('new-todo-text').value); });
+        document.getElementById('add-reading-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_READING, document.getElementById('new-reading-text').value); document.getElementById('new-reading-text').value = ''; });
+        document.getElementById('add-todo-form').addEventListener('submit', e => { e.preventDefault(); addItem(SUPABASE_TABLE_TODOS, document.getElementById('new-todo-text').value); document.getElementById('new-todo-text').value = ''; });
         const readingListDropZone = document.getElementById('reading-column');
         ['dragenter', 'dragover'].forEach(evt => readingListDropZone.addEventListener(evt, e => { e.preventDefault(); if (e.dataTransfer?.types?.includes('Files')) readingListDropZone.classList.add('file-drag-active'); }));
         ['dragleave', 'drop'].forEach(evt => readingListDropZone.addEventListener(evt, e => { e.preventDefault(); readingListDropZone.classList.remove('file-drag-active'); }));
@@ -567,4 +566,3 @@
     </script>
 </body>
 </html>
-
