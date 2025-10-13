@@ -154,6 +154,7 @@
             if (isLoggedIn) {
                 loadingElement.style.display = 'flex';
                 await fetchAndRenderAllLists();
+                // We keep realtime listeners to sync data between different tabs/browsers
                 setupRealtimeListeners();
             } else {
                 readingList = [];
@@ -188,16 +189,16 @@
 
         function setupRealtimeListeners() {
             if (!userId) return;
-            [SUPABASE_TABLE_READING, SUPABASE_TABLE_TODOS].forEach(tableName => {
-                const channelId = `changes-${tableName}-${userId}`;
-                if (supabase.getChannels().some(c => c.topic.includes(channelId))) return;
-                
-                supabase.channel(channelId).on('postgres_changes', 
-                    { event: '*', schema: 'public', table: tableName, filter: `user_id=eq.${userId}` },
-                    () => fetchAndRenderAllLists()
-                ).subscribe();
-            });
+            // No need to set up listeners twice
+            if (supabase.getChannels().length > 0) return;
+            
+            const allChangesChannel = supabase.channel('public:all_changes');
+            allChangesChannel.on('postgres_changes', 
+                { event: '*', schema: 'public', filter: `user_id=eq.${userId}` },
+                () => fetchAndRenderAllLists()
+            ).subscribe();
         }
+
 
         function renderAllLists() {
             renderReadingList();
@@ -206,38 +207,33 @@
         }
 
         function renderReadingList() {
-            // ✨ FIX: Sort a copy of the array with [...] to prevent side-effects.
-            const list = [...readingList].sort((a,b) => a.completed - b.completed || a.order - b.order);
-            
-            readingListElement.innerHTML = '';
-            if (list.length === 0 && userId) { 
-                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`;
-            } else {
-                list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
-            }
-        }
+            const list = readingList.sort((a,b) => a.completed - b.completed || a.order - b.order);
+            readingListElement.innerHTML = '';
+            if (list.length === 0 && userId) { 
+                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`;
+            } else {
+                list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
+            }
+        }
         
         function renderTodoList() {
-            todoListElement.innerHTML = '';
-            const inboxTodos = todoList.filter(item => !item.parent_id);
-            if (inboxTodos.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">You have no tasks!</p>`; }
+            todoListElement.innerHTML = '';
+            const inboxTodos = todoList.filter(item => !item.parent_id);
+            if (inboxTodos.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">You have no tasks!</p>`; }
 
-            // ✨ FIX: Sort a copy of the array with [...] to prevent side-effects.
-            const sortedInbox = [...inboxTodos].sort((a,b) => a.completed - b.completed || a.order - b.order);
-            
-            sortedInbox.forEach(mainTodo => {
-                const childCount = todoList.filter(t => t.parent_id === mainTodo.id).length;
-                const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, childCount);
-                const subtaskContainer = createSubtaskContainer(mainTodo);
-                todoListElement.append(mainLi, subtaskContainer);
-            });
-        }
+            const sortedInbox = inboxTodos.sort((a,b) => a.completed - b.completed || a.order - b.order);
+            sortedInbox.forEach(mainTodo => {
+                const childCount = todoList.filter(t => t.parent_id === mainTodo.id).length;
+                const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, childCount);
+                const subtaskContainer = createSubtaskContainer(mainTodo);
+                todoListElement.append(mainLi, subtaskContainer);
+            });
+        }
 
         function renderDailyFocusList() {
             dailyFocusListElement.innerHTML = '';
             const dailyReading = readingList.filter(item => item.is_daily);
             const dailyTodos = todoList.filter(item => item.is_daily && !item.parent_id);
-            // ✨ FIX: Sort by the new daily_order column
             const dailyItems = [...dailyReading, ...dailyTodos].sort((a,b) => (a.daily_order || 0) - (b.daily_order || 0));
 
             if (dailyItems.length === 0 && userId) { dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Drag items here for today.</p>`; }
@@ -255,22 +251,19 @@
             });
         }
 
-function createSubtaskContainer(mainTodo) {
-            const subtaskContainer = document.createElement('div');
-            subtaskContainer.className = 'subtask-container hidden';
-            subtaskContainer.dataset.parentId = mainTodo.id;
-            const children = todoList.filter(t => t.parent_id === mainTodo.id);
-            
-            // ✨ FIX: Sort a copy of the array with [...] to prevent side-effects.
-            [...children].sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
-                subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
-            });
-            
-            if (expandedTodoParents.has(mainTodo.id.toString())) {
-                subtaskContainer.classList.remove('hidden');
-            }
-            return subtaskContainer;
-        }
+        function createSubtaskContainer(mainTodo) {
+            const subtaskContainer = document.createElement('div');
+            subtaskContainer.className = 'subtask-container hidden';
+            subtaskContainer.dataset.parentId = mainTodo.id;
+            const children = todoList.filter(t => t.parent_id === mainTodo.id);
+            children.sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
+                subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
+            });
+             if (expandedTodoParents.has(mainTodo.id.toString())) {
+                subtaskContainer.classList.remove('hidden');
+            }
+            return subtaskContainer;
+        }
 
         function createItemElement(item, tableName, isSubtask = false, childCount = 0, isDailyFocusItem = false) {
             const li = document.createElement('div');
@@ -397,23 +390,14 @@ function createSubtaskContainer(mainTodo) {
         }
         
         async function addItem(tableName, text, parentId = null) {
-        if (!userId || !text.trim()) return;
-        const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
-        const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
-        const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
-        const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false };
-        if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
-
-        // ✨ ADD THIS LINE FOR DEBUGGING
-        console.log("Attempting to insert:", itemToAdd);
-
-        const { error } = await supabase.from(tableName).insert(itemToAdd);
-
-        // Also log any errors directly
-        if (error) {
-            console.error("Supabase insert error:", error);
+            if (!userId || !text.trim()) return;
+            const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
+            const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
+            const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
+            const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false, daily_order: null };
+            if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
+            await supabase.from(tableName).insert(itemToAdd);
         }
-    }
 
         async function toggleCompleted(tableName, id, status) {
             if (!userId) return;
@@ -421,35 +405,9 @@ function createSubtaskContainer(mainTodo) {
         }
         
         async function deleteItem(tableName, id) {
-            if (!userId) return;
-
-            // --- Start of Optimistic UI Update ---
-            const originalReadingList = [...readingList];
-            const originalTodoList = [...todoList];
-
-            if (tableName === SUPABASE_TABLE_TODOS) {
-                // If we delete a parent task, we must also remove its children locally
-                const childrenIds = todoList.filter(t => t.parent_id == id).map(t => t.id);
-                const idsToRemove = [id, ...childrenIds];
-                todoList = todoList.filter(item => !idsToRemove.includes(item.id));
-            } else {
-                readingList = readingList.filter(item => item.id != id);
-            }
-            renderAllLists(); // Re-render the UI immediately with the item removed
-            // --- End of Optimistic UI Update ---
-
-            // Perform the actual deletion in the database
-            const { error } = await supabase.from(tableName).delete().eq('id', id);
-
-            // If the deletion fails, revert the change and show an error
-            if (error) {
-                console.error("Error deleting item:", error);
-                showModal("Failed to delete the item. The list has been restored.");
-                readingList = originalReadingList;
-                todoList = originalTodoList;
-                renderAllLists();
-            }
-        }
+            if (!userId) return;
+            await supabase.from(tableName).delete().eq('id', id);
+        }
         
         async function removeFromDailyFocus(tableName, id){
             if (!userId) return;
@@ -508,88 +466,73 @@ function createSubtaskContainer(mainTodo) {
             }
         }
 
-        // ✨ FINAL RELIABILITY FIX: A fully reliable, non-optimistic approach
-async function handleDrop(e) {
-        e.preventDefault();
-        if (!draggedItem) { return handleDragEnd(); }
-        
-        const dropTarget = e.target.closest('.list-container, .subtask-container');
-        if (!dropTarget) { return handleDragEnd(); }
+        async function handleDrop(e) {
+            e.preventDefault();
+            if (!draggedItem) { return handleDragEnd(); }
+            
+            const dropTarget = e.target.closest('.list-container, .subtask-container');
+            if (!dropTarget) { return handleDragEnd(); }
 
-        const draggedId = draggedItem.dataset.id;
-        const draggedTable = draggedItem.dataset.table;
-        
-        document.body.style.pointerEvents = 'none';
+            const draggedId = draggedItem.dataset.id;
+            const draggedTable = draggedItem.dataset.table;
+            
+            document.body.style.pointerEvents = 'none';
 
-        try {
-            if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
-                const parentId = dropTarget.dataset.parentId;
-                const readingItem = readingList.find(i => i.id == draggedId);
-                if (readingItem && parentId) {
-                    const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
-                    await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
-                }
-            } 
-            else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
-                const promises = [];
-                const sourceContainer = draggedItem.parentElement;
-                
-                const destIsSubtaskContainer = dropTarget.classList.contains('subtask-container');
-                const destParentId = destIsSubtaskContainer ? dropTarget.dataset.parentId : null;
-                const sourceParentId = draggedItem.dataset.parentId || null;
-                
-                if (draggedTable === SUPABASE_TABLE_TODOS && destParentId != sourceParentId) {
-                    promises.push(supabase.from(SUPABASE_TABLE_TODOS).update({ parent_id: destParentId }).eq('id', draggedId));
-                }
-
-                if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
-                    const isMovingToDaily = !!dropTarget.closest('#daily-focus-column');
-                    promises.push(supabase.from(draggedTable).update({ is_daily: isMovingToDaily }).eq('id', draggedId));
-                }
-
-                const indicator = dropTarget.querySelector('.drag-over-indicator');
-                if (indicator) {
-                    dropTarget.insertBefore(draggedItem, indicator);
+            try {
+                if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
+                    const parentId = dropTarget.dataset.parentId;
+                    const readingItem = readingList.find(i => i.id == draggedId);
+                    if (readingItem && parentId) {
+                        const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
+                        await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
+                    }
+                } 
+                else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
+                    const promises = [];
+                    const sourceContainer = draggedItem.parentElement;
                     
-                    const isDaily = dropTarget.closest('#daily-focus-column');
-                    const orderColumn = isDaily ? 'daily_order' : 'order';
+                    if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
+                        const isMovingToDaily = dropTarget.id === 'daily-focus-list';
+                        promises.push(supabase.from(draggedTable).update({ is_daily: isMovingToDaily }).eq('id', draggedId));
+                    }
 
-                    const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
-                    
-                    const itemsToReorder = Array.from(dropTarget.children)
-                        .filter(el => el.matches('.bauhaus-item[data-id]'));
+                    const indicator = dropTarget.querySelector('.drag-over-indicator');
+                    if (indicator) {
+                        dropTarget.insertBefore(draggedItem, indicator);
+                        
+                        const isDaily = dropTarget.id === 'daily-focus-list';
+                        const orderColumn = isDaily ? 'daily_order' : 'order';
 
-                    itemsToReorder.forEach((itemEl, index) => {
-                        const id = itemEl.dataset.id;
-                        const table = itemEl.dataset.table;
-                        if (id && table && updatesByTable[table]) {
-                            const update = { id: id };
-                            update[orderColumn] = index;
-                            updatesByTable[table].push(update);
-                        }
-                    });
+                        const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
+                        
+                        Array.from(dropTarget.children).forEach((itemEl, index) => {
+                            const id = itemEl.dataset.id;
+                            const table = itemEl.dataset.table;
+                            if (id && table && updatesByTable[table]) {
+                                const update = { id: parseInt(id) };
+                                update[orderColumn] = index;
+                                updatesByTable[table].push(update);
+                            }
+                        });
 
-                    for (const table in updatesByTable) {
-                        if (updatesByTable[table].length > 0) {
-                            promises.push(supabase.from(table).upsert(updatesByTable[table]));
+                        for (const table in updatesByTable) {
+                            if (updatesByTable[table].length > 0) {
+                                promises.push(supabase.from(table).upsert(updatesByTable[table]));
+                            }
                         }
                     }
+                    
+                    await Promise.all(promises);
                 }
-                
-                await Promise.all(promises);
+            } catch (error) {
+                console.error("Drop operation failed:", error);
+                showModal("An error occurred. Please refresh the page.");
+            } finally {
+                handleDragEnd();
+                document.body.style.pointerEvents = 'auto';
+                await fetchAndRenderAllLists();
             }
-        } catch (error) {
-            console.error("Drop operation failed:", error);
-            showModal("An error occurred. Please refresh the page.");
-        } finally {
-            handleDragEnd();
-            document.body.style.pointerEvents = 'auto';
-            await fetchAndRenderAllLists();
         }
-    }
-
-
-
 
         // --- Helper Functions and Event Listeners ---
         function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in`; }
