@@ -188,7 +188,6 @@
 
         function setupRealtimeListeners() {
             if (!userId) return;
-            // Clear existing channels to prevent duplicates on re-login
             supabase.getChannels().forEach(channel => channel.unsubscribe());
             
             supabase.channel('public-changes').on('postgres_changes', 
@@ -406,7 +405,6 @@
         
         async function deleteItem(tableName, id) {
             if (!userId) return;
-            // Also delete children if it's a parent todo
             if (tableName === SUPABASE_TABLE_TODOS) {
                  await supabase.from(tableName).delete().eq('parent_id', id);
             }
@@ -511,8 +509,8 @@
                             const id = itemEl.dataset.id;
                             const table = itemEl.dataset.table;
                             if (id && table && updatesByTable[table]) {
-                                // ✅ FIX: Add user_id to the payload to satisfy RLS policies
-                                const update = { id: parseInt(id), user_id: userId };
+                                // ✅ FIX: Pass the 'id' as a string, not a number.
+                                const update = { id: id, user_id: userId };
                                 update[orderColumn] = index;
                                 updatesByTable[table].push(update);
                             }
@@ -533,8 +531,6 @@
             } finally {
                 handleDragEnd();
                 document.body.style.pointerEvents = 'auto';
-                // Fetching is now handled by the realtime listener, but we'll call it
-                // here as a fallback to ensure UI consistency immediately after a drop.
                 await fetchAndRenderAllLists();
             }
         }
@@ -564,13 +560,13 @@
             e.preventDefault(); 
             const input = document.getElementById('new-reading-text');
             addItem(SUPABASE_TABLE_READING, input.value); 
-            input.value = ''; // ✨ Bonus polish: Clear input after submit
+            input.value = '';
         });
         document.getElementById('add-todo-form').addEventListener('submit', e => { 
             e.preventDefault(); 
             const input = document.getElementById('new-todo-text');
             addItem(SUPABASE_TABLE_TODOS, input.value); 
-            input.value = ''; // ✨ Bonus polish: Clear input after submit
+            input.value = '';
         });
         const readingListDropZone = document.getElementById('reading-column');
         ['dragenter', 'dragover'].forEach(evt => readingListDropZone.addEventListener(evt, e => { e.preventDefault(); if (e.dataTransfer?.types?.includes('Files')) readingListDropZone.classList.add('file-drag-active'); }));
