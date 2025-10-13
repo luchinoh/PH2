@@ -467,105 +467,90 @@
         }
 
         // ✨ FINAL RELIABILITY FIX: A simple, robust, non-optimistic approach
-        // Replace your current handleDrop with this robust implementation
-async function handleDrop(e) {
-    e.preventDefault();
-    if (!draggedItem) return handleDragEnd();
+        async function handleDrop(e) {
+            e.preventDefault();
+            if (!draggedItem) return handleDragEnd();
+            
+            const dropTarget = e.target.closest('.list-container, .subtask-container');
+            if (!dropTarget) { return handleDragEnd(); }
 
-    const dropTarget = e.target.closest('.list-container, .subtask-container');
-    if (!dropTarget) { return handleDragEnd(); }
+            const draggedId = draggedItem.dataset.id;
+            const draggedTable = draggedItem.dataset.table;
 
-    const draggedId = draggedItem.dataset.id;
-    const draggedTable = draggedItem.dataset.table;
+            // SCENARIO 1: Create subtask from reading item
+            if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
+                const parentId = dropTarget.dataset.parentId;
+                const readingItem = readingList.find(i => i.id == draggedId);
+                if (readingItem && parentId) {
+                    const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
+                    await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
+                }
+            } 
+            // SCENARIO 2: All other drops (reorder, move between lists)
+            else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
+                const sourceContainer = draggedItem.parentElement;
+                const promises = [];
 
-    try {
-        // Scenario 1: Create subtask from reading item
-        if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
-            const parentId = dropTarget.dataset.parentId;
-            const readingItem = readingList.find(i => String(i.id) === String(draggedId));
-            if (readingItem && parentId) {
-                const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1');
-                await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
+                // Update daily status only if moving between the main panels
+                if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
+                    const isMovingToDaily = dropTarget.id === 'daily-focus-list';
+                    const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
+                    const originalItem = listToCheck.find(i => i.id == draggedId);
+                    const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
+                
+                    if (isMovingToDaily) promises.push(supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId));
+                    else if (isLeavingDaily) promises.push(supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId));
+                }
+
+                const indicator = dropTarget.querySelector('.drag-over-indicator');
+                // --- Replace the "indicator" handling with this robust update flow ---
+if (indicator) {
+    // put the dragged element into the DOM at the indicator
+    dropTarget.insertBefore(draggedItem, indicator);
+
+    // build list of updates (ensure numeric id and order)
+    const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
+    Array.from(dropTarget.children).forEach((itemEl, index) => {
+        const id = itemEl.dataset.id;
+        const table = itemEl.dataset.table;
+        if (id && table && updatesByTable[table]) {
+            updatesByTable[table].push({ id: Number(id), order: index });
+        }
+    });
+
+    // Do per-row updates with error handling (preferred over upsert here)
+    for (const tableName of Object.keys(updatesByTable)) {
+        const rows = updatesByTable[tableName];
+        if (rows.length === 0) continue;
+
+        // Update every row for this table; do them in parallel but capture errors
+        const rowPromises = rows.map(r => 
+            supabase
+                .from(tableName)
+                .update({ order: r.order })
+                .eq('id', r.id)
+                // If your RLS requires user_id in the WHERE clause, append `.eq('user_id', userId)`:
+                //.eq('user_id', userId)
+        );
+
+        const results = await Promise.all(rowPromises);
+        // check for errors and log / surface them
+        results.forEach((res, i) => {
+            if (res.error) {
+                console.error('Order update failed', { table: tableName, row: rows[i], error: res.error });
+                // optional: inform the user
+                showModal('Could not save item order. Check console for details.');
             }
-            handleDragEnd();
-            return;
-        }
-
-        // Scenario 2: Reorder or move between main panels
-        const sourceContainer = draggedItem.parentElement;
-        const promises = [];
-
-        // If moving between main panels, update is_daily appropriately
-        if (sourceContainer?.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
-            const isMovingToDaily = dropTarget.id === 'daily-focus-list';
-            const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
-            const originalItem = listToCheck.find(i => String(i.id) === String(draggedId));
-            const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
-
-            if (isMovingToDaily) promises.push(supabase.from(draggedTable).update({ is_daily: true }).eq('id', Number(draggedId))));
-            else if (isLeavingDaily) promises.push(supabase.from(draggedTable).update({ is_daily: false }).eq('id', Number(draggedId))));
-        }
-
-        const indicator = dropTarget.querySelector('.drag-over-indicator');
-        if (indicator) {
-            // Place the dragged element into the DOM (visually)
-            dropTarget.insertBefore(draggedItem, indicator);
-
-            // Build per-table ordered lists (ensure numeric ids)
-            const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
-
-            Array.from(dropTarget.children).forEach((itemEl, index) => {
-                // skip non-item elements (e.g. the indicator itself)
-                if (!itemEl.dataset || !itemEl.dataset.id || !itemEl.dataset.table) return;
-                const idNum = Number(itemEl.dataset.id);
-                const tableName = itemEl.dataset.table;
-                if (!Number.isFinite(idNum) || !updatesByTable[tableName]) return;
-                updatesByTable[tableName].push({ id: idNum, order: index });
-            });
-
-            // Perform updates per-row (explicit update, not upsert)
-            for (const tableName of Object.keys(updatesByTable)) {
-                const rows = updatesByTable[tableName];
-                if (rows.length === 0) continue;
-
-                // Update each row; RLS will enforce user permissions. If your RLS requires user_id in WHERE clause,
-                // uncomment the `.eq('user_id', userId)` below.
-                const rowPromises = rows.map(r =>
-                    supabase
-                        .from(tableName)
-                        .update({ order: r.order })
-                        .eq('id', r.id)
-                        // .eq('user_id', userId)
-                );
-
-                const results = await Promise.all(rowPromises);
-
-                // Check for errors and report them (so nothing fails silently)
-                results.forEach((res, i) => {
-                    if (res.error) {
-                        console.error('Order update failed', { table: tableName, row: rows[i], error: res.error });
-                        showModal('Could not save item order. Check browser console for details.');
-                    } else {
-                        // optional: debug log successful update
-                        // console.log('Order updated', tableName, rows[i]);
-                    }
-                });
-            }
-        }
-
-        // Wait for any is_daily updates to finish too
-        if (promises.length > 0) {
-            const res = await Promise.all(promises);
-            res.forEach(r => { if (r.error) console.error('is_daily update error', r.error); });
-        }
-    } catch (err) {
-        console.error('handleDrop error', err);
-        showModal('Unexpected error when reordering. Check console for details.');
-    } finally {
-        handleDragEnd();
+        });
     }
 }
 
+                
+                await Promise.all(promises);
+            }
+            
+            handleDragEnd();
+        }
 
         // --- Helper Functions and Event Listeners ---
         function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in`; }
