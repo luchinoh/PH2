@@ -154,7 +154,7 @@
             if (isLoggedIn) {
                 loadingElement.style.display = 'flex';
                 await fetchAndRenderAllLists();
-                // We still use realtime, but only for syncing across tabs, not for primary feedback.
+                // We keep realtime listeners to sync data between different tabs/browsers
                 setupRealtimeListeners();
             } else {
                 readingList = [];
@@ -511,7 +511,6 @@
                         Array.from(dropTarget.children).forEach((itemEl, index) => {
                             const id = itemEl.dataset.id;
                             const table = itemEl.dataset.table;
-                            // ✨ BUG FIX: Filter out the indicator which has no ID
                             if (id && table && updatesByTable[table]) {
                                 updatesByTable[table].push({ id: parseInt(id), order: index });
                             }
@@ -532,7 +531,6 @@
             } finally {
                 handleDragEnd();
                 document.body.style.pointerEvents = 'auto';
-                // Always fetch fresh data after any drop operation completes.
                 await fetchAndRenderAllLists();
             }
         }
