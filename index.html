@@ -492,27 +492,34 @@ async function handleDrop(e) {
                     const promises = [];
                     const sourceContainer = draggedItem.parentElement;
                     
+                    // ✨ FIX 1: Explicitly handle changes in parent_id for todos
+                    const destIsSubtaskContainer = dropTarget.classList.contains('subtask-container');
+                    const destParentId = destIsSubtaskContainer ? dropTarget.dataset.parentId : null;
+                    const sourceParentId = draggedItem.dataset.parentId || null;
+                    
+                    if (draggedTable === SUPABASE_TABLE_TODOS && destParentId != sourceParentId) {
+                        promises.push(supabase.from(SUPABASE_TABLE_TODOS).update({ parent_id: destParentId }).eq('id', draggedId));
+                    }
+
                     if (sourceContainer.closest('.bauhaus-panel') !== dropTarget.closest('.bauhaus-panel')) {
                         const isMovingToDaily = dropTarget.id === 'daily-focus-list';
-                        if (isMovingToDaily) {
-                            promises.push(supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId));
-                        } else {
-                            promises.push(supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId));
-                        }
+                        promises.push(supabase.from(draggedTable).update({ is_daily: isMovingToDaily }).eq('id', draggedId));
                     }
 
                     const indicator = dropTarget.querySelector('.drag-over-indicator');
                     if (indicator) {
                         dropTarget.insertBefore(draggedItem, indicator);
                         
-                        const isDaily = dropTarget.id === 'daily-focus-list';
+                        const isDaily = dropTarget.closest('#daily-focus-column');
                         const orderColumn = isDaily ? 'daily_order' : 'order';
 
                         const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
-                        
-                            // ✨ FIX IS HERE ✨
-                            // We now select only '.bauhaus-item' children to get the correct index.
-                            Array.from(dropTarget.querySelectorAll(':scope > .bauhaus-item')).forEach((itemEl, index) => {
+                        
+                        // ✨ FIX 2: Filter children robustly to get only valid task items for reordering
+                        const itemsToReorder = Array.from(dropTarget.children)
+                            .filter(el => el.matches('.bauhaus-item[data-id]'));
+
+                        itemsToReorder.forEach((itemEl, index) => {
                             const id = itemEl.dataset.id;
                             const table = itemEl.dataset.table;
                             if (id && table && updatesByTable[table]) {
