@@ -72,7 +72,8 @@
 <body class="p-4 sm:p-8">
 
     <div class="max-w-7xl mx-auto w-full flex justify-end mb-4 px-4 sm:px-6">
-        <button id="auth-toggle-btn" class="font-semibold py-2 px-4 border-2 border-black bg-primary-yellow shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">Login</button>
+        <!-- ✨ BUTTON SHADOW REMOVED -->
+        <button id="auth-toggle-btn" class="font-semibold py-2 px-4 border-2 border-black bg-primary-yellow transition-colors hover:bg-yellow-300">Login</button>
     </div>
 
     <div id="app" class="max-w-7xl mx-auto w-full p-0">
@@ -86,7 +87,8 @@
                 <div id="reading-list" class="list-container flex-grow p-4 space-y-2"></div>
                 <form id="add-reading-form" class="flex gap-2 p-4 border-t-3 border-black">
                     <input type="text" id="new-reading-text" placeholder="Add..." class="flex-grow p-3 border-2 border-black focus:outline-none focus:ring-2 focus:ring-primary-blue">
-                    <button type="submit" class="font-semibold bg-primary-blue text-white p-3 border-2 border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">Add</button>
+                    <!-- ✨ BUTTON SHADOW REMOVED -->
+                    <button type="submit" class="font-semibold bg-primary-blue text-white p-3 border-2 border-black transition-colors hover:bg-blue-800">Add</button>
                 </form>
             </div>
 
@@ -102,7 +104,8 @@
                     <div id="todo-list" class="list-container flex-grow p-4 space-y-2"></div>
                     <form id="add-todo-form" class="flex gap-2 p-4 border-t-3 border-black">
                         <input type="text" id="new-todo-text" placeholder="Add..." class="flex-grow p-3 border-2 border-black focus:outline-none focus:ring-2 focus:ring-primary-yellow">
-                        <button type="submit" class="font-semibold bg-primary-yellow text-black p-3 border-2 border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">Add</button>
+                        <!-- ✨ BUTTON SHADOW REMOVED -->
+                        <button type="submit" class="font-semibold bg-primary-yellow text-black p-3 border-2 border-black transition-colors hover:bg-yellow-300">Add</button>
                     </form>
                 </div>
             </div>
@@ -337,7 +340,6 @@
         }
 
         function showAddSubtaskInput(parentId) {
-            // This function remains largely the same, just generates new classes
             const existingInput = document.getElementById('temp-subtask-input-container');
             if (existingInput) existingInput.remove();
             const container = document.querySelector(`.subtask-container[data-parent-id="${parentId}"]`);
@@ -386,9 +388,31 @@
             if (!userId) return;
             await supabase.from(tableName).update({ completed: status }).eq('id', id);
         }
+
+        // ✨ DELETE BUG FIX: Made this function optimistic
         async function deleteItem(tableName, id) {
             if (!userId) return;
-            await supabase.from(tableName).delete().eq('id', id);
+
+            // Optimistic UI Update
+            const originalReadingList = [...readingList];
+            const originalTodoList = [...todoList];
+
+            if (tableName === SUPABASE_TABLE_READING) {
+                readingList = readingList.filter(i => i.id != id);
+            } else {
+                todoList = todoList.filter(i => i.id != id && i.parent_id != id);
+            }
+            renderAllLists();
+
+            // Send delete request to DB
+            const { error } = await supabase.from(tableName).delete().eq('id', id);
+            if (error) {
+                // If the delete fails, revert to the original state
+                readingList = originalReadingList;
+                todoList = originalTodoList;
+                renderAllLists();
+                showModal('Failed to delete item.');
+            }
         }
         
         async function removeFromDailyFocus(tableName, id){
