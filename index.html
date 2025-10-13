@@ -466,7 +466,7 @@
             }
         }
 
-        // ✨ FINAL RELIABILITY FIX: A simple, robust, non-optimistic approach
+        // ✨ FINAL RELIABILITY FIX: A fully reliable, non-optimistic approach
         async function handleDrop(e) {
             e.preventDefault();
             if (!draggedItem) { return handleDragEnd(); }
@@ -474,7 +474,7 @@
             const dropTarget = e.target.closest('.list-container, .subtask-container');
             if (!dropTarget) { return handleDragEnd(); }
 
-            const draggedId = parseInt(draggedItem.dataset.id, 10);
+            const draggedId = draggedItem.dataset.id;
             const draggedTable = draggedItem.dataset.table;
             
             document.body.style.pointerEvents = 'none';
@@ -506,13 +506,20 @@
                     const indicator = dropTarget.querySelector('.drag-over-indicator');
                     if (indicator) {
                         dropTarget.insertBefore(draggedItem, indicator);
-                        const updates = Array.from(dropTarget.children)
-                            .map((itemEl, index) => ({ id: parseInt(itemEl.dataset.id), order: index }))
-                            .filter(item => !isNaN(item.id));
-                        
-                        if (updates.length > 0) {
-                            const tableForUpdates = draggedTable;
-                            promises.push(supabase.from(tableForUpdates).upsert(updates));
+                        const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
+                        Array.from(dropTarget.children).forEach((itemEl, index) => {
+                            const id = itemEl.dataset.id;
+                            const table = itemEl.dataset.table;
+                            if (id && table && updatesByTable[table]) {
+                                // ✨ BUG FIX: Correctly parse ID to number
+                                updatesByTable[table].push({ id: parseInt(id), order: index });
+                            }
+                        });
+
+                        for (const table in updatesByTable) {
+                            if (updatesByTable[table].length > 0) {
+                                promises.push(supabase.from(table).upsert(updatesByTable[table]));
+                            }
                         }
                     }
                     
@@ -524,10 +531,10 @@
             } finally {
                 handleDragEnd();
                 document.body.style.pointerEvents = 'auto';
+                // Always fetch fresh data after any drop operation completes.
                 await fetchAndRenderAllLists();
             }
         }
-
 
         // --- Helper Functions and Event Listeners ---
         function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in`; }
