@@ -3,65 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reading & To-Do Hub</title>
+    <title>Productivity Hub</title>
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#3498db">
+    <meta name="theme-color" content="#005f9e">
     <link rel="apple-touch-icon" href="icon-512x512.png">
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;700&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #F8F7F4; color: #2c3e50; font-family: 'Cormorant Garamond', serif; min-height: 100vh; }
-        .text-poppins { font-family: 'Poppins', sans-serif; }
-        .drag-source { opacity: 0.4; }
-        .drag-over-indicator { border-top: 2px solid #3498db; margin-top: -2px; height: 0; }
-        .file-drag-active { box-shadow: 0 0 0 4px #3498db inset; }
-        .subtask-container { padding-left: 2.5rem; }
-        .subtask-drop-active { background-color: #ecf0f1; }
-    </style>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: { 'off-white': '#F8F7F4', 'charcoal': '#2c3e50', 'primary-blue': '#3498db', 'primary-green': '#2ecc71' },
-                    fontFamily: { garamond: ['Cormorant Garamond', 'serif'], poppins: ['Poppins', 'sans-serif'] },
-                    maxWidth: { '7xl': '1280px' }
-                }
-            }
+        body { 
+            font-family: 'Montserrat', sans-serif; 
+            background-color: #f0e7d8; /* Parchment-like background */
+            color: #1a1a1a; 
         }
-    </script>
+        .bauhaus-panel { 
+            background-color: #fff;
+            border: 3px solid #1a1a1a;
+            box-shadow: 8px 8px 0px rgba(0,0,0,1);
+        }
+        .bauhaus-item { 
+            display: flex; 
+            align-items: center; 
+            gap: 1rem; 
+            padding: 0.75rem 1rem; 
+            border-bottom: 2px solid #f0e7d8;
+            background-color: #fff; /* Ensure item background is white */
+        }
+        .bauhaus-item:last-child {
+            border-bottom: none;
+        }
+        .bauhaus-checkbox { 
+            width: 1.25rem; 
+            height: 1.25rem; 
+            border: 2px solid #1a1a1a; 
+            flex-shrink: 0; 
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .bauhaus-checkbox.completed { 
+            background-color: #1a1a1a; 
+            color: white;
+        }
+        .line-through { 
+            text-decoration: line-through; 
+            color: #999;
+        }
+        .color-block {
+            padding: 0.5rem 0;
+            text-align: center;
+            font-weight: 700;
+            font-size: 1.5rem;
+            color: #1a1a1a;
+            border-bottom: 3px solid #1a1a1a;
+        }
+        .bg-primary-red { background-color: #d92027; }
+        .bg-primary-blue { background-color: #005f9e; }
+        .bg-primary-yellow { background-color: #f5d90e; }
+        .drag-source { opacity: 0.4; }
+        .drag-over-indicator { border-top: 3px solid #1a1a1a; margin-top: -3px; height: 0; }
+        .file-drag-active { box-shadow: 0 0 0 4px #005f9e inset; }
+        .subtask-container { padding-left: 2.5rem; background-color: #faf8f5; padding-top: 0.5rem; padding-bottom: 0.5rem;}
+        .subtask-drop-active { background-color: #eaddc7; }
+    </style>
 </head>
-<body class="min-h-screen p-4 sm:p-8">
+<body class="p-4 sm:p-8">
 
     <div class="max-w-7xl mx-auto w-full flex justify-end mb-4 px-4 sm:px-6">
-        <button id="auth-toggle-btn" class="text-poppins text-xs font-semibold py-2 px-4 rounded-full bg-charcoal text-white hover:bg-gray-700 transition" onclick="openAuthModal()">Login</button>
+        <button id="auth-toggle-btn" class="font-semibold py-2 px-4 border-2 border-black bg-primary-yellow shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">Login</button>
     </div>
 
     <div id="app" class="max-w-7xl mx-auto w-full p-0">
-        <h1 class="text-4xl sm:text-5xl font-garamond font-bold mb-8 text-center border-b pb-4 px-4 sm:px-6">Productivity Hub</h1>
-        <div id="loading" class="flex justify-center items-center py-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-blue"></div><p class="ml-3 text-poppins">Connecting...</p></div>
+        <h1 class="text-5xl sm:text-6xl text-center mb-12 sm:mb-16 font-bold">Productivity Hub</h1>
+        <div id="loading" class="flex justify-center items-center py-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div><p class="ml-3 font-semibold">Connecting...</p></div>
         
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:p-6 lg:items-start">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 lg:items-start">
             
-            <div id="reading-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
-                <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Reading List</h2>
-                <div id="reading-list" class="list-container flex-grow space-y-2 mb-4 p-2 border-b"></div>
-                <div class="h-[1.75rem] mb-4 mt-auto"></div>
-                <form id="add-reading-form" class="flex space-x-2 pt-4"><input type="text" id="new-reading-text" placeholder="Add..." class="flex-grow p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-blue text-poppins"><button type="submit" class="text-poppins font-semibold bg-primary-blue text-white rounded-lg px-4 py-3 shadow-md hover:bg-blue-600 transition">Add Text</button></form>
+            <div id="reading-column" class="bauhaus-panel flex flex-col">
+                <div class="color-block bg-primary-blue" style="color: white;">Reading List</div>
+                <div id="reading-list" class="list-container flex-grow p-4 space-y-2"></div>
+                <form id="add-reading-form" class="flex gap-2 p-4 border-t-3 border-black">
+                    <input type="text" id="new-reading-text" placeholder="Add..." class="flex-grow p-3 border-2 border-black focus:outline-none focus:ring-2 focus:ring-primary-blue">
+                    <button type="submit" class="font-semibold bg-primary-blue text-white p-3 border-2 border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">Add</button>
+                </form>
             </div>
 
-            <div class="flex flex-col gap-4">
-                <div id="daily-focus-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col border-2 border-primary-blue">
-                    <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Daily Focus</h2>
-                    <div id="daily-focus-list" class="list-container flex-grow space-y-2 mb-4 p-2 border-b"></div>
-                    <div class="h-[1.75rem] mb-4 mt-auto"></div>
-                    <p class="text-center text-sm text-poppins text-gray-500 pt-4">Drag items here to plan your day.</p>
+            <div class="flex flex-col gap-8 lg:gap-12">
+                <div id="daily-focus-column" class="bauhaus-panel flex flex-col">
+                    <div class="color-block bg-primary-red" style="color: white;">Daily Focus</div>
+                    <div id="daily-focus-list" class="list-container flex-grow p-4 space-y-2"></div>
+                    <p class="text-center text-sm font-semibold text-gray-600 p-4 border-t-3 border-black">Drag items here to plan your day.</p>
                 </div>
 
-                <div id="todo-column" class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
-                    <h2 class="text-3xl font-garamond font-bold mb-4 text-center">Task Inbox</h2>
-                    <div id="todo-list" class="list-container flex-grow space-y-2 mb-4 p-2 border-b"></div>
-                    <div class="h-[1.75rem] mb-4 mt-auto"></div>
-                    <form id="add-todo-form" class="flex space-x-2 pt-4"><input type="text" id="new-todo-text" placeholder="Add..." class="flex-grow p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-green text-poppins"><button type="submit" class="text-poppins font-semibold bg-primary-green text-white rounded-lg px-4 py-3 shadow-md hover:bg-green-600 transition">Add Task</button></form>
+                <div id="todo-column" class="bauhaus-panel flex flex-col">
+                    <div class="color-block bg-primary-yellow">Task Inbox</div>
+                    <div id="todo-list" class="list-container flex-grow p-4 space-y-2"></div>
+                    <form id="add-todo-form" class="flex gap-2 p-4 border-t-3 border-black">
+                        <input type="text" id="new-todo-text" placeholder="Add..." class="flex-grow p-3 border-2 border-black focus:outline-none focus:ring-2 focus:ring-primary-yellow">
+                        <button type="submit" class="font-semibold bg-primary-yellow text-black p-3 border-2 border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">Add</button>
+                    </form>
                 </div>
             </div>
 
@@ -92,12 +134,10 @@
         
         function initializeApp() {
             if (SUPABASE_URL.includes("YOUR_DEV_SUPABASE_URL")) {
-                loadingElement.innerHTML = `<p class="text-red-500 font-bold text-center text-poppins">Error: Supabase URL and Key are not set. Please replace the placeholder values in the script.</p>`;
+                loadingElement.innerHTML = `<p class="text-red-500 font-bold text-center">Error: Supabase URL and Key are not set. Please replace the placeholder values in the script.</p>`;
                 return;
             }
-
             supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
             supabase.auth.onAuthStateChange((event, session) => {
                 const newUserId = session?.user?.id || null;
                 if (newUserId !== userId) {
@@ -153,26 +193,7 @@
                 
                 supabase.channel(channelId).on('postgres_changes', 
                     { event: '*', schema: 'public', table: tableName, filter: `user_id=eq.${userId}` },
-                    (payload) => {
-                        if (payload.eventType === 'INSERT') {
-                            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-                            // ✨ FIX: Only add the item if it doesn't already exist locally
-                            if (!list.some(item => item.id === payload.new.id)) {
-                                list.push(payload.new);
-                            }
-                        } else if (payload.eventType === 'UPDATE') {
-                            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-                            const index = list.findIndex(i => i.id === payload.new.id);
-                            if (index !== -1) list[index] = { ...list[index], ...payload.new };
-                        } else if (payload.eventType === 'DELETE') {
-                            if (tableName === SUPABASE_TABLE_READING) {
-                                readingList = readingList.filter(i => i.id !== payload.old.id);
-                            } else {
-                                todoList = todoList.filter(i => i.id !== payload.old.id);
-                            }
-                        }
-                        renderAllLists();
-                    }
+                    () => fetchAndRenderAllLists()
                 ).subscribe();
             });
         }
@@ -187,7 +208,7 @@
             const list = readingList.sort((a,b) => a.completed - b.completed || a.order - b.order);
             readingListElement.innerHTML = '';
             if (list.length === 0 && userId) { 
-                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">Your reading list is empty.</p>`;
+                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`;
             } else {
                 list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
             }
@@ -197,7 +218,7 @@
             expandedTodoParents = new Set(Array.from(document.querySelectorAll('.subtask-container:not(.hidden)')).map(c => c.dataset.parentId));
             todoListElement.innerHTML = '';
             const inboxTodos = todoList.filter(item => !item.parent_id);
-            if (inboxTodos.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">You have no tasks!</p>`; }
+            if (inboxTodos.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">You have no tasks!</p>`; }
 
             const sortedInbox = inboxTodos.sort((a,b) => a.completed - b.completed || a.order - b.order);
             sortedInbox.forEach(mainTodo => {
@@ -215,7 +236,7 @@
             const dailyTodos = todoList.filter(item => item.is_daily && !item.parent_id);
             const dailyItems = [...dailyReading, ...dailyTodos];
 
-            if (dailyItems.length === 0 && userId) { dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 text-poppins">Drag items here for today.</p>`; }
+            if (dailyItems.length === 0 && userId) { dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Drag items here for today.</p>`; }
 
             dailyItems.sort((a,b) => (a.order || 0) - (b.order || 0)).forEach(item => {
                  const isTodo = 'parent_id' in item;
@@ -244,7 +265,7 @@
 
         function createSubtaskContainer(mainTodo) {
             const subtaskContainer = document.createElement('div');
-            subtaskContainer.className = 'mt-1 space-y-1 subtask-container';
+            subtaskContainer.className = 'subtask-container';
             subtaskContainer.dataset.parentId = mainTodo.id;
             const children = todoList.filter(t => t.parent_id === mainTodo.id);
             children.sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
@@ -263,68 +284,60 @@
             li.dataset.table = tableName;
             li.dataset.order = item.order;
             li.setAttribute('draggable', !item.completed && !isSubtask);
-            li.className = `flex items-center rounded-xl border border-gray-200 transition-shadow duration-300 ${isSubtask ? 'p-2 bg-white' : 'p-3 shadow-sm bg-off-white hover:shadow-md'} ${item.completed ? 'opacity-50' : ''}`;
+            li.className = `bauhaus-item ${item.completed ? 'opacity-50' : ''}`;
             li.dataset.isSubtask = String(isSubtask);
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragend', handleDragEnd);
             li.addEventListener('dragenter', handleDragEnter);
             li.addEventListener('dragleave', handleDragLeave);
 
-            if (!isSubtask && childCount > 0) {
-                const toggleButton = document.createElement('button');
-                toggleButton.className = 'mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
-                toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform ${expandedTodoParents.has(item.id.toString()) ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
-                toggleButton.onclick = function() {
-                    const parentElement = this.closest('[data-id]');
-                    const subtaskContainer = parentElement.nextElementSibling;
-                    if (subtaskContainer?.classList.contains('subtask-container')) {
-                        subtaskContainer.classList.toggle('hidden');
-                        this.querySelector('svg').classList.toggle('rotate-90');
-                    }
-                };
-                li.appendChild(toggleButton);
-            }
-
-            const isReading = tableName === SUPABASE_TABLE_READING;
-            const primaryColor = isReading ? 'primary-blue' : 'primary-green';
-            const toggleButton = document.createElement('button');
-            const sizeClasses = isSubtask ? 'h-5 w-5' : 'h-6 w-6';
-            toggleButton.className = `mr-3 flex-shrink-0 ${sizeClasses} flex items-center justify-center rounded-full transition-colors ${item.completed ? `text-white bg-${primaryColor}` : `text-gray-400 border-2 border-gray-300 hover:border-${primaryColor}`}`;
-            toggleButton.innerHTML = item.completed ? `<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7" /></svg>` : ``;
-            toggleButton.onclick = () => toggleCompleted(tableName, item.id, !item.completed);
+            const check = document.createElement('div');
+            check.className = `bauhaus-checkbox ${item.completed ? 'completed' : ''}`;
+            check.innerHTML = item.completed ? '✓' : '';
+            check.onclick = () => toggleCompleted(tableName, item.id, !item.completed);
             
             const textSpan = document.createElement('span');
-            textSpan.className = `flex-grow ${isSubtask ? 'text-base' : (isReading ? 'text-lg' : 'text-xl')} font-garamond ${item.completed ? 'line-through text-gray-500' : ''}`;
-            if (isReading) textSpan.innerHTML = item.text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-            else textSpan.textContent = item.text;
+            textSpan.className = `flex-grow font-semibold ${item.completed ? 'line-through' : ''}`;
+            if (tableName === SUPABASE_TABLE_READING) {
+                textSpan.innerHTML = item.text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            } else {
+                textSpan.textContent = item.text;
+            }
             
-            const deleteButton = document.createElement('button');
-            deleteButton.className = 'ml-auto flex-shrink-0 p-2 h-7 w-7 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-gray-100 transition';
-            deleteButton.innerHTML = `<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" /></svg>`;
-            deleteButton.onclick = () => deleteItem(tableName, item.id);
-            
-            li.append(toggleButton, textSpan);
+            li.append(check, textSpan);
+
+            const buttonsWrapper = document.createElement('div');
+            buttonsWrapper.className = 'ml-auto flex items-center';
             
             if(isDailyFocusItem && !isSubtask){
                 const removeButton = document.createElement('button');
-                removeButton.className = 'ml-2 flex-shrink-0 p-2 h-7 w-7 flex items-center justify-center rounded-full text-blue-400 hover:text-blue-600 hover:bg-gray-100 transition';
-                removeButton.innerHTML = `<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+                removeButton.className = 'p-1';
+                removeButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
                 removeButton.onclick = () => removeFromDailyFocus(tableName, item.id);
-                li.append(removeButton);
+                buttonsWrapper.append(removeButton);
             }
 
-            if (!isSubtask && !isReading && !item.completed) {
+            if (!isSubtask && tableName === SUPABASE_TABLE_TODOS && !item.completed) {
                 const addSubtaskButton = document.createElement('button');
-                addSubtaskButton.className = 'ml-2 flex-shrink-0 p-2 h-8 w-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-500 hover:bg-gray-100 transition';
+                addSubtaskButton.className = 'p-1';
                 addSubtaskButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4" /></svg>`;
                 addSubtaskButton.onclick = (e) => { e.stopPropagation(); showAddSubtaskInput(item.id); };
-                li.append(addSubtaskButton);
+                buttonsWrapper.append(addSubtaskButton);
             }
-            li.append(deleteButton);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'p-1';
+            deleteButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" /></svg>`;
+            deleteButton.onclick = () => deleteItem(tableName, item.id);
+            buttonsWrapper.append(deleteButton);
+            
+            li.append(buttonsWrapper);
+
             return li;
         }
 
         function showAddSubtaskInput(parentId) {
+            // This function remains largely the same, just generates new classes
             const existingInput = document.getElementById('temp-subtask-input-container');
             if (existingInput) existingInput.remove();
             const container = document.querySelector(`.subtask-container[data-parent-id="${parentId}"]`);
@@ -334,14 +347,14 @@
             if (parentLi) { parentLi.querySelector('.subtask-toggle-btn svg')?.classList.add('rotate-90'); }
             const inputContainer = document.createElement('div');
             inputContainer.id = 'temp-subtask-input-container';
-            inputContainer.className = 'p-2 flex items-center space-x-2';
+            inputContainer.className = 'flex gap-2 p-2';
             const input = document.createElement('input');
             input.type = 'text';
             input.placeholder = 'Add new sub-task...';
-            input.className = 'flex-grow p-2 border rounded-lg text-poppins text-sm';
+            input.className = 'flex-grow p-2 border-2 border-black';
             const saveButton = document.createElement('button');
             saveButton.textContent = 'Save';
-            saveButton.className = 'text-poppins text-sm font-semibold bg-primary-blue text-white rounded-lg px-3 py-2';
+            saveButton.className = 'font-semibold bg-primary-yellow text-black p-2 border-2 border-black';
             const saveAndCleanup = async () => {
                 if (input.value.trim()) {
                     input.disabled = true; saveButton.disabled = true;
@@ -366,44 +379,20 @@
             const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
             const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false };
             if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
-
-            // ✨ FIX: This no longer optimistically updates, it just sends the data.
-            // The realtime listener is now the only source of truth for updates.
-            const { error } = await supabase.from(tableName).insert(itemToAdd);
-            if (error) {
-                showModal('Failed to add item.');
-                fetchAndRenderAllLists(); // Re-sync on error
-            }
+            await supabase.from(tableName).insert(itemToAdd);
         }
 
         async function toggleCompleted(tableName, id, status) {
             if (!userId) return;
-            // Optimistic update
-            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-            const item = list.find(i => i.id == id);
-            if (item) item.completed = status;
-            renderAllLists();
             await supabase.from(tableName).update({ completed: status }).eq('id', id);
         }
         async function deleteItem(tableName, id) {
             if (!userId) return;
-            // Optimistic update
-            if (tableName === SUPABASE_TABLE_READING) {
-                readingList = readingList.filter(i => i.id != id);
-            } else {
-                todoList = todoList.filter(i => i.id != id);
-            }
-            renderAllLists();
             await supabase.from(tableName).delete().eq('id', id);
         }
         
         async function removeFromDailyFocus(tableName, id){
             if (!userId) return;
-            // Optimistic update
-            const list = tableName === SUPABASE_TABLE_READING ? readingList : todoList;
-            const item = list.find(i => i.id == id);
-            if (item) item.is_daily = false;
-            renderAllLists();
             await supabase.from(tableName).update({ is_daily: false }).eq('id', id);
         }
 
@@ -442,7 +431,6 @@
                 const targetEl = e.target.closest('[draggable="true"]');
                 const indicator = document.querySelector('.drag-over-indicator') || document.createElement('div');
                 indicator.className = 'drag-over-indicator';
-                indicator.style.borderColor = dropTarget.id.includes('daily') ? '#3498db' : '#2ecc71';
                 if (targetEl?.parentNode === dropTarget) {
                     const rect = targetEl.getBoundingClientRect();
                     if (e.clientY - rect.top < rect.height / 2) dropTarget.insertBefore(indicator, targetEl);
@@ -504,7 +492,7 @@
         }
 
         // --- Helper Functions and Event Listeners ---
-        function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in as ${email}`; btn.onclick = isLoggedOut ? openAuthModal : handleLogout; }
+        function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in`; }
         function updateFormState(isLoggedIn) { document.querySelectorAll('#add-reading-form input, #add-reading-form button, #add-todo-form input, #add-todo-form button').forEach(el => el.disabled = !isLoggedIn); document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Author (Year): *Title*" : "Please log in"; document.getElementById('new-todo-text').placeholder = isLoggedIn ? "Buy milk, etc." : "Please log in"; }
         async function handleAuthSubmit(e) { e.preventDefault(); const email = document.getElementById('auth-email').value, password = document.getElementById('auth-password').value; const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) document.getElementById('auth-message').textContent = error.message; else closeAuthModal(); }
         async function handleLogout() { await supabase.auth.signOut(); }
