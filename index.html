@@ -206,28 +206,29 @@
         }
 
         function renderReadingList() {
-            const list = readingList.sort((a,b) => a.completed - b.completed || a.order - b.order);
-            readingListElement.innerHTML = '';
-            if (list.length === 0 && userId) { 
-                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`;
-            } else {
-                list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
-            }
-        }
+            // ✨ FIX: Sort a copy of the array, not the original
+            const list = [...readingList].sort((a,b) => a.completed - b.completed || a.order - b.order);
+            readingListElement.innerHTML = '';
+            if (list.length === 0 && userId) { 
+                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`;
+            } else {
+                list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
+            }
+        }
         
         function renderTodoList() {
-            todoListElement.innerHTML = '';
-            const inboxTodos = todoList.filter(item => !item.parent_id);
-            if (inboxTodos.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">You have no tasks!</p>`; }
+            todoListElement.innerHTML = '';
+            const inboxTodos = todoList.filter(item => !item.parent_id);
+            if (inboxTodos.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">You have no tasks!</p>`; }
 
-            const sortedInbox = inboxTodos.sort((a,b) => a.completed - b.completed || a.order - b.order);
-            sortedInbox.forEach(mainTodo => {
-                const childCount = todoList.filter(t => t.parent_id === mainTodo.id).length;
-                const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, childCount);
-                const subtaskContainer = createSubtaskContainer(mainTodo);
-                todoListElement.append(mainLi, subtaskContainer);
-            });
-        }
+            const sortedInbox = [...inboxTodos].sort((a,b) => a.completed - b.completed || a.order - b.order);
+            sortedInbox.forEach(mainTodo => {
+                const childCount = todoList.filter(t => t.parent_id === mainTodo.id).length;
+                const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, childCount);
+                const subtaskContainer = createSubtaskContainer(mainTodo);
+                todoListElement.append(mainLi, subtaskContainer);
+            });
+        }
 
         function renderDailyFocusList() {
             dailyFocusListElement.innerHTML = '';
@@ -251,19 +252,20 @@
             });
         }
 
-        function createSubtaskContainer(mainTodo) {
-            const subtaskContainer = document.createElement('div');
-            subtaskContainer.className = 'subtask-container hidden';
-            subtaskContainer.dataset.parentId = mainTodo.id;
-            const children = todoList.filter(t => t.parent_id === mainTodo.id);
-            children.sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
-                subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
-            });
-             if (expandedTodoParents.has(mainTodo.id.toString())) {
-                subtaskContainer.classList.remove('hidden');
-            }
-            return subtaskContainer;
-        }
+         function createSubtaskContainer(mainTodo) {
+            const subtaskContainer = document.createElement('div');
+            subtaskContainer.className = 'subtask-container hidden';
+            subtaskContainer.dataset.parentId = mainTodo.id;
+            const children = todoList.filter(t => t.parent_id === mainTodo.id);
+            // ✨ FIX: Sort a copy of the array, not the original
+            [...children].sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
+                subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
+            });
+             if (expandedTodoParents.has(mainTodo.id.toString())) {
+                subtaskContainer.classList.remove('hidden');
+            }
+            return subtaskContainer;
+        }
 
         function createItemElement(item, tableName, isSubtask = false, childCount = 0, isDailyFocusItem = false) {
             const li = document.createElement('div');
@@ -405,9 +407,35 @@
         }
         
         async function deleteItem(tableName, id) {
-            if (!userId) return;
-            await supabase.from(tableName).delete().eq('id', id);
-        }
+            if (!userId) return;
+
+            // --- Start of Optimistic UI Update ---
+            const originalReadingList = [...readingList];
+            const originalTodoList = [...todoList];
+
+            if (tableName === SUPABASE_TABLE_TODOS) {
+                // If we delete a parent task, we must also remove its children locally
+                const childrenIds = todoList.filter(t => t.parent_id == id).map(t => t.id);
+                const idsToRemove = [id, ...childrenIds];
+                todoList = todoList.filter(item => !idsToRemove.includes(item.id));
+            } else {
+                readingList = readingList.filter(item => item.id != id);
+            }
+            renderAllLists(); // Re-render the UI immediately with the item removed
+            // --- End of Optimistic UI Update ---
+
+            // Perform the actual deletion in the database
+            const { error } = await supabase.from(tableName).delete().eq('id', id);
+
+            // If the deletion fails, revert the change and show an error
+            if (error) {
+                console.error("Error deleting item:", error);
+                showModal("Failed to delete the item. The list has been restored.");
+                readingList = originalReadingList;
+                todoList = originalTodoList;
+                renderAllLists();
+            }
+        }
         
         async function removeFromDailyFocus(tableName, id){
             if (!userId) return;
