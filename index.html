@@ -390,34 +390,64 @@
         }
         
         async function addItem(tableName, text, parentId = null) {
-            if (!userId || !text.trim()) return;
-            const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
-            const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
-            const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
-            // ✅ FIX 2 of 4: Initialize new items with a null daily_order.
-            const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false, daily_order: null };
-            if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
-            await supabase.from(tableName).insert(itemToAdd);
-        }
+    if (!userId || !text.trim()) return;
+    const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
+    const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
+    const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
+    const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false, daily_order: null };
+    if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
+
+    const { data, error } = await supabase.from(tableName).insert(itemToAdd).select().single();
+    if (error) {
+        console.error('Failed to add item', error);
+        showModal('Failed to add item.');
+        return;
+    }
+
+    // Immediately refresh local data so the UI updates without a manual refresh.
+    await fetchAndRenderAllLists();
+}
+
 
         async function toggleCompleted(tableName, id, status) {
-            if (!userId) return;
-            await supabase.from(tableName).update({ completed: status }).eq('id', id);
+    if (!userId) return;
+    const { error } = await supabase.from(tableName).update({ completed: status }).eq('id', id);
+    if (error) {
+        console.error('toggleCompleted error', error);
+        showModal('Could not update item.');
+    } else {
+        await fetchAndRenderAllLists();
+    }
+}
+
+async function deleteItem(tableName, id) {
+    if (!userId) return;
+    try {
+        if (tableName === SUPABASE_TABLE_TODOS) {
+            // delete subtasks first
+            const { error: errChild } = await supabase.from(tableName).delete().eq('parent_id', id);
+            if (errChild) throw errChild;
         }
-        
-        async function deleteItem(tableName, id) {
-            if (!userId) return;
-            if (tableName === SUPABASE_TABLE_TODOS) {
-                 await supabase.from(tableName).delete().eq('parent_id', id);
-            }
-            await supabase.from(tableName).delete().eq('id', id);
-        }
-        
-        async function removeFromDailyFocus(tableName, id){
-            if (!userId) return;
-            // ✅ FIX 3 of 4: When removing from daily focus, also clear its daily_order.
-            await supabase.from(tableName).update({ is_daily: false, daily_order: null }).eq('id', id);
-        }
+        const { error } = await supabase.from(tableName).delete().eq('id', id);
+        if (error) throw error;
+        await fetchAndRenderAllLists();
+    } catch (err) {
+        console.error('deleteItem error', err);
+        showModal('Could not delete item.');
+    }
+}
+
+async function removeFromDailyFocus(tableName, id){
+    if (!userId) return;
+    const { error } = await supabase.from(tableName).update({ is_daily: false, daily_order: null }).eq('id', id);
+    if (error) {
+        console.error('removeFromDailyFocus error', error);
+        showModal('Could not remove from Daily Focus.');
+    } else {
+        await fetchAndRenderAllLists();
+    }
+}
+
 
         let draggedItem = null;
         function handleDragStart(e) { draggedItem = this; setTimeout(() => this.classList.add('drag-source'), 0); }
@@ -472,80 +502,86 @@
         }
 
 async function handleDrop(e) {
-            e.preventDefault();
-            if (!draggedItem) { return handleDragEnd(); }
-            
-            // ✅ FIX: Corrected e.gtarget to e.target
-            const dropTarget = e.target.closest('.list-container, .subtask-container');
-            if (!dropTarget) { return handleDragEnd(); }
+    e.preventDefault();
+    if (!draggedItem) { return handleDragEnd(); }
 
-            // Determine if the drop is happening inside the Daily Focus column
-            const isDailyDrop = !!dropTarget.closest('#daily-focus-column');
-            // Determine if the item came from the Daily Focus column
-            const isDailyDrag = !!draggedItem.closest('#daily-focus-column');
+    const dropTarget = e.target.closest('.list-container, .subtask-container');
+    if (!dropTarget) { return handleDragEnd(); }
 
-            const draggedId = draggedItem.dataset.id;
-            const draggedTable = draggedItem.dataset.table;
-            
-            document.body.style.pointerEvents = 'none';
+    const isDailyDrop = !!dropTarget.closest('#daily-focus-column');
+    const isDailyDrag = !!draggedItem.closest('#daily-focus-column');
 
-            try {
-                // Case 1: A reading item is being turned into a subtask
-                if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
-                    const parentId = dropTarget.dataset.parentId;
-                    const readingItem = readingList.find(i => i.id == draggedId);
-                    if (readingItem && parentId) {
-                        const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1'); 
-                        await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
-                    }
-                } 
-                // Case 2: Standard drop within or between the main list areas
-                else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
-                    const promises = [];
-                    
-                    // A) Handle moves BETWEEN panels (e.g., Reading List -> Daily Focus)
-                    if (isDailyDrop !== isDailyDrag) {
-                        promises.push(supabase.from(draggedTable).update({ is_daily: isDailyDrop }).eq('id', draggedId));
-                    }
+    const draggedId = draggedItem.dataset.id;
+    const draggedTable = draggedItem.dataset.table;
 
-                    const indicator = dropTarget.querySelector('.drag-over-indicator');
-                    if (indicator) {
-                        dropTarget.insertBefore(draggedItem, indicator);
-                        
-                        // B) Determine which column to update based on WHERE THE DROP HAPPENED
-                        const orderColumn = isDailyDrop ? 'daily_order' : 'order';
-                        
-                        const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
-                        
-                        // C) Create a batch of updates for all items in the target list
-                        Array.from(dropTarget.children).forEach((itemEl, index) => {
-                            const id = itemEl.dataset.id;
-                            const table = itemEl.dataset.table;
-                            if (id && table && updatesByTable[table]) {
-                                const update = { id: id, user_id: userId };
-                                update[orderColumn] = index;
-                                updatesByTable[table].push(update);
-                            }
-                        });
+    document.body.style.pointerEvents = 'none';
 
-                        for (const table in updatesByTable) {
-                            if (updatesByTable[table].length > 0) {
-                                promises.push(supabase.from(table).upsert(updatesByTable[table]));
-                            }
-                        }
-                    }
-                    
-                    await Promise.all(promises);
-                }
-            } catch (error) {
-                console.error("Drop operation failed:", error);
-                showModal("An error occurred. Your changes may not have been saved.");
-            } finally {
-                handleDragEnd();
-                document.body.style.pointerEvents = 'auto';
-                await fetchAndRenderAllLists();
+    try {
+        // Case: reading item -> subtask on a todo's subtask container
+        if (draggedTable === SUPABASE_TABLE_READING && dropTarget.classList.contains('subtask-container')) {
+            const parentId = dropTarget.dataset.parentId;
+            const readingItem = readingList.find(i => String(i.id) === String(draggedId));
+            if (readingItem && parentId) {
+                const cleanText = readingItem.text.replace(/\*([^*]+)\*/g, '$1');
+                await addItem(SUPABASE_TABLE_TODOS, `From reading: ${cleanText}`, parentId);
             }
+        } 
+        // Standard drop within/between lists
+        else if (dropTarget.classList.contains('list-container') || dropTarget.classList.contains('subtask-container')) {
+            const promises = [];
+
+            // A) If the item moved between daily/non-daily space, update is_daily flag for the single dragged item
+            if (isDailyDrop !== isDailyDrag) {
+                promises.push(supabase.from(draggedTable).update({ is_daily: isDailyDrop }).eq('id', draggedId));
+            }
+
+            const indicator = dropTarget.querySelector('.drag-over-indicator');
+            if (indicator) {
+                dropTarget.insertBefore(draggedItem, indicator);
+
+                // B) Now build update batches. Only set 'daily_order' if the drop target is inside Daily Focus.
+                // For non-daily containers we only update 'order'.
+                const updatesByTable = { [SUPABASE_TABLE_READING]: [], [SUPABASE_TABLE_TODOS]: [] };
+
+                // We only care about children that are draggable items (have data-id & data-table).
+                Array.from(dropTarget.children).forEach((itemEl, index) => {
+                    const id = itemEl.dataset?.id;
+                    const table = itemEl.dataset?.table;
+                    if (!id || !table) return;
+                    const numericId = Number(id); // ensure numeric id for Supabase
+                    if (!Number.isFinite(numericId)) return;
+
+                    if (isDailyDrop) {
+                        // Update daily_order only (do NOT overwrite 'order' here)
+                        updatesByTable[table].push({ id: numericId, user_id: userId, daily_order: index });
+                    } else {
+                        // Non-daily column: update normal 'order' only
+                        // If this container is a subtask-container, we should keep parent_id unchanged.
+                        updatesByTable[table].push({ id: numericId, user_id: userId, order: index });
+                    }
+                });
+
+                // Perform batch updates per table. Use upsert with onConflict 'id' to update rows.
+                for (const table of Object.keys(updatesByTable)) {
+                    if (updatesByTable[table].length > 0) {
+                        // Use upsert so we only update the provided columns for existing rows.
+                        promises.push(supabase.from(table).upsert(updatesByTable[table], { onConflict: 'id' }));
+                    }
+                }
+            }
+
+            await Promise.all(promises);
         }
+    } catch (error) {
+        console.error("Drop operation failed:", error);
+        showModal("An error occurred. Your changes may not have been saved.");
+    } finally {
+        handleDragEnd();
+        document.body.style.pointerEvents = 'auto';
+        await fetchAndRenderAllLists();
+    }
+}
+
 
 
         // --- Helper Functions and Event Listeners ---
