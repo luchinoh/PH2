@@ -252,14 +252,14 @@
 
         function createSubtaskContainer(mainTodo) {
             const subtaskContainer = document.createElement('div');
-            subtaskContainer.className = 'subtask-container';
+            subtaskContainer.className = 'subtask-container hidden';
             subtaskContainer.dataset.parentId = mainTodo.id;
             const children = todoList.filter(t => t.parent_id === mainTodo.id);
             children.sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
                 subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
             });
-             if (!expandedTodoParents.has(mainTodo.id.toString())) {
-                subtaskContainer.classList.add('hidden');
+             if (expandedTodoParents.has(mainTodo.id.toString())) {
+                subtaskContainer.classList.remove('hidden');
             }
             return subtaskContainer;
         }
@@ -403,30 +403,9 @@
             if (!userId) return;
             await supabase.from(tableName).update({ completed: status }).eq('id', id);
         }
-        
-        // ✨ SUB-TASK DELETE FIX
         async function deleteItem(tableName, id) {
             if (!userId) return;
-
-            const originalReadingList = [...readingList];
-            const originalTodoList = [...todoList];
-
-            if (tableName === SUPABASE_TABLE_READING) {
-                readingList = readingList.filter(i => i.id != id);
-            } else {
-                const childrenIds = todoList.filter(t => t.parent_id == id).map(t => t.id);
-                const idsToRemove = [id, ...childrenIds];
-                todoList = todoList.filter(i => !idsToRemove.includes(i.id));
-            }
-            renderAllLists();
-
-            const { error } = await supabase.from(tableName).delete().eq('id', id);
-            if (error) {
-                readingList = originalReadingList;
-                todoList = originalTodoList;
-                renderAllLists();
-                showModal('Failed to delete item.');
-            }
+            await supabase.from(tableName).delete().eq('id', id);
         }
         
         async function removeFromDailyFocus(tableName, id){
@@ -511,9 +490,13 @@
                 const listToCheck = draggedTable === SUPABASE_TABLE_READING ? readingList : todoList;
                 const originalItem = listToCheck.find(i => i.id == draggedId);
                 const isLeavingDaily = !isMovingToDaily && originalItem?.is_daily;
-
-                if (isMovingToDaily) await supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId);
-                else if (isLeavingDaily) await supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId);
+                
+                // ✨ DRAG & DROP BUG FIX: Check if the source and destination are different before changing status
+                const sourceContainer = draggedItem.parentElement;
+                if(sourceContainer.id !== dropTarget.id) {
+                    if (isMovingToDaily) await supabase.from(draggedTable).update({ is_daily: true }).eq('id', draggedId);
+                    else if (isLeavingDaily) await supabase.from(draggedTable).update({ is_daily: false }).eq('id', draggedId);
+                }
 
                 const indicator = dropTarget.querySelector('.drag-over-indicator');
                 if (indicator) {
