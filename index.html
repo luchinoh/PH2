@@ -574,10 +574,6 @@ async function handleDrop(e) {
     }
 }
 
-
-
-
-
         // --- Helper Functions and Event Listeners ---
         function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in`; }
         function updateFormState(isLoggedIn) { document.querySelectorAll('#add-reading-form input, #add-reading-form button, #add-todo-form input, #add-todo-form button').forEach(el => el.disabled = !isLoggedIn); document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Author (Year): *Title*" : "Please log in"; document.getElementById('new-todo-text').placeholder = isLoggedIn ? "Buy milk, etc." : "Please log in"; }
