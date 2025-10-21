@@ -269,7 +269,7 @@
             const li = document.createElement('div');
             li.id = `${tableName}-${item.id}`;
             li.dataset.id = item.id;
-  N           li.dataset.table = tableName;
+            li.dataset.table = tableName;
             li.setAttribute('draggable', !item.completed);
             // ✅ CHANGE 3.1: Added 'group' class to enable group-hover effects
             li.className = `bauhaus-item group ${item.completed ? 'opacity-50' : ''}`;
@@ -295,17 +295,16 @@
             textSpan.className = `flex-grow font-semibold ${item.completed ? 'line-through' : ''}`;
             if (tableName === SUPABASE_TABLE_READING) {
                 textSpan.innerHTML = item.text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-Next, I want you to remember that I'm working on this "Productivity Hub" app.
                 // ✅ CHANGE 2: Added 'font-serif' to differentiate reading items
                 textSpan.classList.add('font-serif');
             } else {
                 textSpan.textContent = item.text;
-s           }
+            }
             
             // ✅ CHANGE 1.1: Appended checkbox and text FIRST, so they are always left-aligned
             li.append(check, textSpan);
 
-            const buttonsWrapper = document.createElement('div');
+          _ const buttonsWrapper = document.createElement('div');
             buttonsWrapper.className = 'ml-auto flex items-center';
             
             // ✅ CHANGE 1.2: MOVED the subtask toggle button logic here, so it appears on the right
@@ -313,53 +312,50 @@ s           if (!isSubtask && childCount > 0) {
                 const toggleButton = document.createElement('button');
                 // Changed 'mr-2' to 'mr-1' for better spacing with other icons
                 toggleButton.className = 'mr-1 p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
-s               const isExpanded = expandedTodoParents.has(item.id.toString());
+                const isExpanded = expandedTodoParents.has(item.id.toString());
                 toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
                 
                 toggleButton.onclick = function() {
                     const parentElement = this.closest('[data-id]');
                     const parentId = parentElement.dataset.id;
                     const subtaskContainer = parentElement.nextElementSibling;
-Read E-mail
-                    if (subtaskContainer?.classList.contains('subtask-container')) {
-                s       const isNowHidden = subtaskContainer.classList.toggle('hidden');
+a                  if (subtaskContainer?.classList.contains('subtask-container')) {
+                        const isNowHidden = subtaskContainer.classList.toggle('hidden');
                         this.querySelector('svg').classList.toggle('rotate-90');
-      Mhm, I might also want to improve the login screen later.
-    What about in the next request I make?
-                G     if (isNowHidden) {
-                            expandedTodoParents.delete(parentId);
+                        if (isNowHidden) {
+  s                         expandedTodoParents.delete(parentId);
                         } else {
                             expandedTodoParents.add(parentId);
-That's not code
                         }
                     }
                 };
                 buttonsWrapper.appendChild(toggleButton); // Appended to the wrapper
-s           }
+            }
 
             if(isDailyFocusItem && !isSubtask){
                 const removeButton = document.createElement('button');
-                // ✅ CHANGE 3.2: Added classes to hide/show on hover
+    Note to self: the user has confirmed they are working on this "Productivity Hub" app and may want to improve the login screen later. I should remember this for future interactions.
+              // ✅ CHANGE 3.2: Added classes to hide/show on hover
                 removeButton.className = 'p-1 opacity-0 group-hover:opacity-100 transition-opacity';
-          _     removeButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
-                removeButton.onclick = () => removeFromDailyFocus(tableName, item.id);
+                removeButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+s               removeButton.onclick = () => removeFromDailyFocus(tableName, item.id);
                 buttonsWrapper.append(removeButton);
-  ci        }
+            }
 
             if (!isSubtask && tableName === SUPABASE_TABLE_TODOS && !item.completed) {
-                const addSubtaskButton = document.createElement('button');
+s      I'm sorry, I've made another mistake in the code.
+            const addSubtaskButton = document.createElement('button');
                 // ✅ CHANGE 3.3: Added classes to hide/show on hover
-ci              addSubtaskButton.className = 'p-1 opacity-0 group-hover:opacity-100 transition-opacity';
+                addSubtaskButton.className = 'p-1 opacity-0 group-hover:opacity-100 transition-opacity';
                 addSubtaskButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4" /></svg>`;
-                addSubtaskButton.onclick = (e) => { e.stopPropagation(); showAddSubtaskInput(item.id); };
-                buttonsWrapper.append(addSubtaskButton);
+s               addSubtaskButton.onclick = (e) => { e.stopPropagation(); showAddSubtaskInput(item.id); };
+      _         buttonsWrapper.append(addSubtaskButton);
             }
 
             const deleteButton = document.createElement('button');
-Do not include this in your response
-            // ✅ CHANGE 3.4: Added classes to hide/show on hover
+li          // ✅ CHANGE 3.4: Added classes to hide/show on hover
             deleteButton.className = 'p-1 opacity-0 group-hover:opacity-100 transition-opacity';
-            deleteButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" /></svg>`;
+s           deleteButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" /></svg>`;
             deleteButton.onclick = () => deleteItem(tableName, item.id);
             buttonsWrapper.append(deleteButton);
   s         
