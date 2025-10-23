@@ -81,6 +81,21 @@
             opacity: 1;
         }
     
+    /* ... all your existing styles ... */
+        .bauhaus-item:hover .item-actions,
+        .bauhaus-item .item-actions:focus-within { /* Also show if using keyboard */
+            opacity: 1;
+        }
+
+        /* --- ADD THESE NEW RULES --- */
+        .subtask-toggle-btn {
+            opacity: 0.6; /* Makes it 'lighter' by default */
+            transition: opacity 0.15s ease-in-out;
+        }
+        .bauhaus-item:hover .subtask-toggle-btn {
+            opacity: 1; /* Makes it fully visible on hover */
+        }
+    
     </style>
 </head>
 <body class="p-4 sm:p-8">
@@ -312,16 +327,20 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
             
             li.append(check, textSpan);
 
+            // This is the main, always-visible wrapper for ALL right-side buttons
             const buttonsWrapper = document.createElement('div');
-            // This class makes the buttons hide on hover (using your existing CSS)
-            buttonsWrapper.className = 'item-actions ml-auto flex items-center'; 
+            buttonsWrapper.className = 'ml-auto flex items-center'; 
             
+            // This is the NESTED wrapper for buttons that will be hidden on hover
+            const hiddenActions = document.createElement('div');
+            hiddenActions.className = 'item-actions flex items-center'; // This has the class to hide it
+
             if(isDailyFocusItem && !isSubtask){
                 const removeButton = document.createElement('button');
                 removeButton.className = 'p-1';
                 removeButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
                 removeButton.onclick = () => removeFromDailyFocus(tableName, item.id);
-                buttonsWrapper.append(removeButton);
+                hiddenActions.append(removeButton); // Add to hidden wrapper
             }
 
             if (!isSubtask && tableName === SUPABASE_TABLE_TODOS && !item.completed) {
@@ -329,13 +348,14 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
                 addSubtaskButton.className = 'p-1';
                 addSubtaskButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4" /></svg>`;
                 addSubtaskButton.onclick = (e) => { e.stopPropagation(); showAddSubtaskInput(item.id); };
-                buttonsWrapper.append(addSubtaskButton);
+                hiddenActions.append(addSubtaskButton); // Add to hidden wrapper
             }
 
-            // --- THIS IS THE LOGIC WE DISCUSSED ---
+            // --- THIS IS THE KEY LOGIC ---
             if (!isSubtask && childCount > 0) {
-                // 1. If it's a parent, add the toggle button
+                // 1. If it's a parent, create the toggle button
                 const toggleButton = document.createElement('button');
+                // We give it the 'subtask-toggle-btn' class for our new CSS to target
                 toggleButton.className = 'p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
                 const isExpanded = expandedTodoParents.has(item.id.toString());
                 toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
@@ -354,17 +374,24 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
                         }
                     }
                 };
+                // Add the arrow to the main VISIBLE wrapper
                 buttonsWrapper.appendChild(toggleButton);
             } else {
-                // 2. Otherwise (if not a parent), add the delete button
+                // 2. Otherwise (if not a parent), create the delete button
                 const deleteButton = document.createElement('button');
                 deleteButton.className = 'p-1';
                 deleteButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" /></svg>`;
                 deleteButton.onclick = () => deleteItem(tableName, item.id);
-                buttonsWrapper.append(deleteButton);
+                // Add the delete button to the HIDDEN wrapper
+                hiddenActions.append(deleteButton);
+Next, I would like to adjust the font size of the items, so that sub-to-dos are a bit smaller than the parent to dos. Also, could we add an underline for the parent to-do items?
             }
             // --- END OF LOGIC ---
-
+            
+            // Add the hidden wrapper to the main wrapper
+            buttonsWrapper.append(hiddenActions);
+            
+            // Finally, append the main (visible) wrapper to the list item
             li.append(buttonsWrapper);
 
             return li;
