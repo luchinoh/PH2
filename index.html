@@ -67,6 +67,20 @@
         .file-drag-active { box-shadow: 0 0 0 4px #005f9e inset; }
         .subtask-container { padding-left: 2.5rem; background-color: #faf8f5; padding-top: 0.5rem; padding-bottom: 0.5rem;}
         .subtask-drop-active { background-color: #eaddc7; }
+    /* ... all your existing styles ... */
+        .subtask-drop-active { background-color: #eaddc7; }
+
+        /* --- ADD THESE NEW RULES --- */
+        .bauhaus-item .item-actions {
+            opacity: 0;
+            transition: opacity 0.15s ease-in-out;
+        }
+
+        .bauhaus-item:hover .item-actions,
+        .bauhaus-item .item-actions:focus-within { /* Also show if using keyboard */
+            opacity: 1;
+        }
+    
     </style>
 </head>
 <body class="p-4 sm:p-8">
@@ -283,14 +297,41 @@
             li.addEventListener('dragenter', handleDragEnter);
             li.addEventListener('dragleave', handleDragLeave);
 
-            // --- CHANGE STARTS HERE ---
+            // The toggle button logic is REMOVED from here
 
-            // 1. Create a variable for the button, but don't add it yet.
-            let toggleButton = null; 
+            const check = document.createElement('div');
+            check.className = `bauhaus-checkbox ${item.completed ? 'completed' : ''}`;
+            check.innerHTML = item.completed ? '✓' : '';
+            check.onclick = () => toggleCompleted(tableName, item.id, !item.completed);
+            
+            const textSpan = document.createElement('span');
+            textSpan.className = `flex-grow font-semibold ${item.completed ? 'line-through' : ''}`;
+            if (tableName === SUPABASE_TABLE_READING) {
+                textSpan.innerHTML = item.text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            } else {
+                textSpan.textContent = item.text;
+            }
+            
+            // Append check and text first for alignment
+            li.append(check, textSpan);
+
+            const buttonsWrapper = document.createElement('div');
+            // ADD the 'item-actions' class for our CSS
+            buttonsWrapper.className = 'item-actions ml-auto flex items-center'; 
+            
+            if(isDailyFocusItem && !isSubtask){
+                const removeButton = document.createElement('button');
+                removeButton.className = 'p-1';
+                removeButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+                removeButton.onclick = () => removeFromDailyFocus(tableName, item.id);
+                buttonsWrapper.append(removeButton);
+            }
+
+            // MOVED toggle button logic here, inside the wrapper
             if (!isSubtask && childCount > 0) {
-                toggleButton = document.createElement('button');
-                // 2. Change margin from 'mr-2' (margin-right) to 'ml-2' (margin-left)
-                toggleButton.className = 'ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
+                const toggleButton = document.createElement('button');
+                // Use 'p-1' for consistent spacing like other buttons
+                toggleButton.className = 'p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
                 const isExpanded = expandedTodoParents.has(item.id.toString());
                 toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
                 
@@ -308,41 +349,10 @@
                         }
                     }
                 };
-                // 3. DO NOT append the button here.
+                // Append it to the wrapper
+                buttonsWrapper.appendChild(toggleButton);
             }
 
-            const check = document.createElement('div');
-            check.className = `bauhaus-checkbox ${item.completed ? 'completed' : ''}`;
-            check.innerHTML = item.completed ? '✓' : '';
-            check.onclick = () => toggleCompleted(tableName, item.id, !item.completed);
-            
-            const textSpan = document.createElement('span');
-            textSpan.className = `flex-grow font-semibold ${item.completed ? 'line-through' : ''}`;
-            if (tableName === SUPABASE_TABLE_READING) {
-                textSpan.innerHTML = item.text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-            } else {
-                textSpan.textContent = item.text;
-            }
-            
-            // 4. Append elements in the new, correct order
-            li.append(check); // Checkbox goes first
-            if (toggleButton) {
-                li.append(toggleButton); // Toggle arrow goes second (if it exists)
-            }
-            li.append(textSpan); // Text goes third
-
-            // --- CHANGE ENDS HERE ---
-
-            const buttonsWrapper = document.createElement('div');
-            buttonsWrapper.className = 'ml-auto flex items-center';
-            
-            if(isDailyFocusItem && !isSubtask){
-                const removeButton = document.createElement('button');
-                removeButton.className = 'p-1';
-                removeButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
-                removeButton.onclick = () => removeFromDailyFocus(tableName, item.id);
-                buttonsWrapper.append(removeButton);
-            }
 
             if (!isSubtask && tableName === SUPABASE_TABLE_TODOS && !item.completed) {
                 const addSubtaskButton = document.createElement('button');
@@ -358,6 +368,7 @@
             deleteButton.onclick = () => deleteItem(tableName, item.id);
             buttonsWrapper.append(deleteButton);
             
+            // Finally, append the whole button wrapper to the list item
             li.append(buttonsWrapper);
 
             return li;
