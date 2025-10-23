@@ -279,7 +279,7 @@
             return subtaskContainer;
         }
 
-        function createItemElement(item, tableName, isSubtask = false, childCount = 0, isDailyFocusItem = false) {
+function createItemElement(item, tableName, isSubtask = false, childCount = 0, isDailyFocusItem = false) {
             const li = document.createElement('div');
             li.id = `${tableName}-${item.id}`;
             li.dataset.id = item.id;
@@ -297,8 +297,6 @@
             li.addEventListener('dragenter', handleDragEnter);
             li.addEventListener('dragleave', handleDragLeave);
 
-            // The toggle button logic is REMOVED from here
-
             const check = document.createElement('div');
             check.className = `bauhaus-checkbox ${item.completed ? 'completed' : ''}`;
             check.innerHTML = item.completed ? '✓' : '';
@@ -312,25 +310,17 @@
                 textSpan.textContent = item.text;
             }
             
-            // Append check and text first for alignment
             li.append(check, textSpan);
 
+            // This is the main, always-visible wrapper for ALL right-side buttons
             const buttonsWrapper = document.createElement('div');
-            // ADD the 'item-actions' class for our CSS
-            buttonsWrapper.className = 'item-actions ml-auto flex items-center'; 
+            buttonsWrapper.className = 'ml-auto flex items-center'; 
             
-            if(isDailyFocusItem && !isSubtask){
-                const removeButton = document.createElement('button');
-                removeButton.className = 'p-1';
-                removeButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
-                removeButton.onclick = () => removeFromDailyFocus(tableName, item.id);
-                buttonsWrapper.append(removeButton);
-            }
+            // --- CHANGE STARTS HERE ---
 
-            // MOVED toggle button logic here, inside the wrapper
+            // 1. Create the toggle button (arrow) and add it directly to the VISIBLE wrapper
             if (!isSubtask && childCount > 0) {
                 const toggleButton = document.createElement('button');
-                // Use 'p-1' for consistent spacing like other buttons
                 toggleButton.className = 'p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
                 const isExpanded = expandedTodoParents.has(item.id.toString());
                 toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
@@ -349,26 +339,42 @@
                         }
                     }
                 };
-                // Append it to the wrapper
-                buttonsWrapper.appendChild(toggleButton);
+                buttonsWrapper.appendChild(toggleButton); // Add to visible wrapper
             }
 
+            // 2. Create a NEW, NESTED wrapper for the buttons that will be hidden
+            const hiddenActions = document.createElement('div');
+            hiddenActions.className = 'item-actions flex items-center'; // This has the class to hide it
+
+            // 3. Add all other buttons to this NEW HIDDEN wrapper
+            if(isDailyFocusItem && !isSubtask){
+                const removeButton = document.createElement('button');
+                removeButton.className = 'p-1';
+                removeButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+                removeButton.onclick = () => removeFromDailyFocus(tableName, item.id);
+                hiddenActions.append(removeButton); // Add to hidden wrapper
+            }
 
             if (!isSubtask && tableName === SUPABASE_TABLE_TODOS && !item.completed) {
                 const addSubtaskButton = document.createElement('button');
                 addSubtaskButton.className = 'p-1';
                 addSubtaskButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4" /></svg>`;
                 addSubtaskButton.onclick = (e) => { e.stopPropagation(); showAddSubtaskInput(item.id); };
-                buttonsWrapper.append(addSubtaskButton);
+                hiddenActions.append(addSubtaskButton); // Add to hidden wrapper
             }
 
             const deleteButton = document.createElement('button');
             deleteButton.className = 'p-1';
             deleteButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" /></svg>`;
             deleteButton.onclick = () => deleteItem(tableName, item.id);
-            buttonsWrapper.append(deleteButton);
+            hiddenActions.append(deleteButton); // Add to hidden wrapper
             
-            // Finally, append the whole button wrapper to the list item
+            // 4. Add the hidden wrapper to the main wrapper
+            buttonsWrapper.append(hiddenActions);
+            
+            // --- CHANGE ENDS HERE ---
+            
+            // Finally, append the main (visible) wrapper to the list item
             li.append(buttonsWrapper);
 
             return li;
