@@ -283,9 +283,14 @@
             li.addEventListener('dragenter', handleDragEnter);
             li.addEventListener('dragleave', handleDragLeave);
 
+            // --- CHANGE STARTS HERE ---
+
+            // 1. Create a variable for the button, but don't add it yet.
+            let toggleButton = null; 
             if (!isSubtask && childCount > 0) {
-                const toggleButton = document.createElement('button');
-                toggleButton.className = 'mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
+                toggleButton = document.createElement('button');
+                // 2. Change margin from 'mr-2' (margin-right) to 'ml-2' (margin-left)
+                toggleButton.className = 'ml-2 p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
                 const isExpanded = expandedTodoParents.has(item.id.toString());
                 toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
                 
@@ -303,7 +308,7 @@
                         }
                     }
                 };
-                li.appendChild(toggleButton);
+                // 3. DO NOT append the button here.
             }
 
             const check = document.createElement('div');
@@ -319,7 +324,14 @@
                 textSpan.textContent = item.text;
             }
             
-            li.append(check, textSpan);
+            // 4. Append elements in the new, correct order
+            li.append(check); // Checkbox goes first
+            if (toggleButton) {
+                li.append(toggleButton); // Toggle arrow goes second (if it exists)
+            }
+            li.append(textSpan); // Text goes third
+
+            // --- CHANGE ENDS HERE ---
 
             const buttonsWrapper = document.createElement('div');
             buttonsWrapper.className = 'ml-auto flex items-center';
