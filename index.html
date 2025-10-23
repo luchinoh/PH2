@@ -351,11 +351,11 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
                 hiddenActions.append(addSubtaskButton); // Add to hidden wrapper
             }
 
-            // --- THIS IS THE KEY LOGIC ---
+            // --- THIS IS THE CORRECTED LOGIC ---
             if (!isSubtask && childCount > 0) {
                 // 1. If it's a parent, create the toggle button
                 const toggleButton = document.createElement('button');
-                // We give it the 'subtask-toggle-btn' class for our new CSS to target
+                // This class is targeted by your CSS to make it 'lighter'
                 toggleButton.className = 'p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
                 const isExpanded = expandedTodoParents.has(item.id.toString());
                 toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
@@ -374,23 +374,27 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
                         }
                     }
                 };
-                // Add the arrow to the main VISIBLE wrapper
+
+                // Add the hidden actions FIRST
+                buttonsWrapper.append(hiddenActions);
+                // Add the visible toggle button SECOND (so it's on the far right)
                 buttonsWrapper.appendChild(toggleButton);
+
             } else {
                 // 2. Otherwise (if not a parent), create the delete button
                 const deleteButton = document.createElement('button');
                 deleteButton.className = 'p-1';
                 deleteButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" /></svg>`;
                 deleteButton.onclick = () => deleteItem(tableName, item.id);
+                
                 // Add the delete button to the HIDDEN wrapper
                 hiddenActions.append(deleteButton);
+                // Add the hidden actions (which now contain delete) to the main wrapper
+                buttonsWrapper.append(hiddenActions);
             }
             // --- END OF LOGIC ---
             
-            // Add the hidden wrapper to the main wrapper
-            buttonsWrapper.append(hiddenActions);
-            
-            // Finally, append the main (visible) wrapper to the list item
+            // Finally, append the main wrapper to the list item
             li.append(buttonsWrapper);
 
             return li;
