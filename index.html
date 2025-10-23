@@ -332,7 +332,7 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
                 buttonsWrapper.append(addSubtaskButton);
             }
 
-            // --- THIS IS THE NEW LOGIC ---
+            // --- THIS IS THE LOGIC WE DISCUSSED ---
             if (!isSubtask && childCount > 0) {
                 // 1. If it's a parent, add the toggle button
                 const toggleButton = document.createElement('button');
@@ -362,9 +362,8 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
                 deleteButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" /></svg>`;
                 deleteButton.onclick = () => deleteItem(tableName, item.id);
                 buttonsWrapper.append(deleteButton);
-Next, I would like to adjust the font size of the items, so that sub-to-dos are a bit smaller than the parent to dos. Also, could we add an underline for the parent to-do items?
             }
-            // --- END OF NEW LOGIC ---
+            // --- END OF LOGIC ---
 
             li.append(buttonsWrapper);
 
