@@ -105,7 +105,7 @@
                 <div id="daily-focus-column" class="bauhaus-panel flex flex-col">
                     <div class="color-block bg-primary-red" style="color: white;">Daily Focus</div>
                     <div id="daily-focus-list" class="list-container flex-grow p-4 space-y-2"></div>
-                    <p class="text-center text-sm font-semibold text-gray-600 p-4 border-t-3 border-black">Plan your day.</p>
+                    <p id="daily-focus-footer" class="text-center text-sm font-semibold text-gray-600 p-4 border-t-3 border-black" style="opacity: 0;">&nbsp;</p>
                 </div>
 
                 <div id="reading-column" class="bauhaus-panel flex flex-col">
@@ -253,7 +253,7 @@
             dailyFocusListElement.innerHTML = '';
             const dailyReading = readingList.filter(item => item.is_daily);
             const dailyTodos = todoList.filter(item => item.is_daily && !item.parent_id);
-            // ✅ FIX 1 of 4: Sort the Daily Focus list by its own 'daily_order' column.
+            // Sort the Daily Focus list by its own 'daily_order' column.
             const dailyItems = [...dailyReading, ...dailyTodos].sort((a,b) => (a.daily_order ?? Infinity) - (b.daily_order ?? Infinity));
 
             if (dailyItems.length === 0 && userId) { dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Drag items here for today.</p>`; }
@@ -618,10 +618,10 @@ async function handleDrop(e) {
         function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in`; }
         function updateFormState(isLoggedIn) { 
             document.querySelectorAll('#add-reading-form input, #add-reading-form button, #add-todo-form input, #add-todo-form button').forEach(el => el.disabled = !isLoggedIn); 
-            // UPDATED: Reading placeholder
-            document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Reading" : "Please log in"; 
-            // UPDATED: To-Do placeholder
-            document.getElementById('new-todo-text').placeholder = isLoggedIn ? "To-Do" : "Please log in"; 
+            // UPDATED: Reading placeholder to '...'
+            document.getElementById('new-reading-text').placeholder = isLoggedIn ? "..." : "Please log in"; 
+            // UPDATED: To-Do placeholder to '...'
+            document.getElementById('new-todo-text').placeholder = isLoggedIn ? "..." : "Please log in"; 
         }
         async function handleAuthSubmit(e) { e.preventDefault(); const email = document.getElementById('auth-email').value, password = document.getElementById('auth-password').value; const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) document.getElementById('auth-message').textContent = error.message; else closeAuthModal(); }
         async function handleLogout() { await supabase.auth.signOut(); }
