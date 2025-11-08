@@ -67,10 +67,6 @@
         .file-drag-active { box-shadow: 0 0 0 4px #005f9e inset; }
         .subtask-container { padding-left: 2.5rem; background-color: #faf8f5; padding-top: 0.5rem; padding-bottom: 0.5rem;}
         .subtask-drop-active { background-color: #eaddc7; }
-    /* ... all your existing styles ... */
-        .subtask-drop-active { background-color: #eaddc7; }
-
-        /* --- ADD THESE NEW RULES --- */
         .bauhaus-item .item-actions {
             opacity: 0;
             transition: opacity 0.15s ease-in-out;
@@ -80,14 +76,6 @@
         .bauhaus-item .item-actions:focus-within { /* Also show if using keyboard */
             opacity: 1;
         }
-    
-    /* ... all your existing styles ... */
-        .bauhaus-item:hover .item-actions,
-        .bauhaus-item .item-actions:focus-within { /* Also show if using keyboard */
-            opacity: 1;
-        }
-
-        /* --- ADD THESE NEW RULES --- */
         .subtask-toggle-btn {
             opacity: 0.6; /* Makes it 'lighter' by default */
             transition: opacity 0.15s ease-in-out;
@@ -95,12 +83,10 @@
         .bauhaus-item:hover .subtask-toggle-btn {
             opacity: 1; /* Makes it fully visible on hover */
         }
-    
-    /* --- OPTION 3: CHECKBOX SHAPE --- */
-.bauhaus-item[data-table="reading_list"] .bauhaus-checkbox {
-    border-radius: 50%; /* Makes it a circle */
-}
-    
+        .bauhaus-item[data-table="reading_list"] .bauhaus-checkbox {
+            border-radius: 50%; /* Makes it a circle */
+        }
+        
     </style>
 </head>
 <body class="p-4 sm:p-8">
@@ -119,7 +105,7 @@
                 <div id="daily-focus-column" class="bauhaus-panel flex flex-col">
                     <div class="color-block bg-primary-red" style="color: white;">Daily Focus</div>
                     <div id="daily-focus-list" class="list-container flex-grow p-4 space-y-2"></div>
-                    <p class="text-center text-sm font-semibold text-gray-600 p-4 border-t-3 border-black">Drag items here to plan your day.</p>
+                    <p class="text-center text-sm font-semibold text-gray-600 p-4 border-t-3 border-black">Plan your day.</p>
                 </div>
 
                 <div id="reading-column" class="bauhaus-panel flex flex-col">
@@ -201,7 +187,7 @@
         async function fetchAndRenderAllLists() {
             if (!userId) { 
                 renderAllLists(); 
-                loadingElement.style.display = 'none';
+                loadingElement.style.display = 'none'; 
                 return; 
             }
             const [reading, todos] = await Promise.all([
@@ -243,7 +229,7 @@
             const list = readingList.sort((a,b) => a.completed - b.completed || a.order - b.order);
             readingListElement.innerHTML = '';
             if (list.length === 0 && userId) { 
-                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`;
+                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`; 
             } else {
                 list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
             }
@@ -293,7 +279,7 @@
             children.sort((a,b) => a.completed - b.completed || a.order - b.order).forEach(subtask => {
                 subtaskContainer.appendChild(createItemElement(subtask, SUPABASE_TABLE_TODOS, true));
             });
-             if (expandedTodoParents.has(mainTodo.id.toString())) {
+            if (expandedTodoParents.has(mainTodo.id.toString())) {
                 subtaskContainer.classList.remove('hidden');
             }
             return subtaskContainer;
@@ -516,7 +502,7 @@ async function removeFromDailyFocus(tableName, id){
         function handleDragLeave(e) {
              const target = e.target.closest('.subtask-container, .bauhaus-item');
              if(target && target.classList.contains('subtask-drop-active')) {
-                target.classList.remove('subtask-drop-active');
+                 target.classList.remove('subtask-drop-active');
              }
         }
         
@@ -630,7 +616,13 @@ async function handleDrop(e) {
 
         // --- Helper Functions and Event Listeners ---
         function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in`; }
-        function updateFormState(isLoggedIn) { document.querySelectorAll('#add-reading-form input, #add-reading-form button, #add-todo-form input, #add-todo-form button').forEach(el => el.disabled = !isLoggedIn); document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Author (Year): *Title*" : "Please log in"; document.getElementById('new-todo-text').placeholder = isLoggedIn ? "Buy milk, etc." : "Please log in"; }
+        function updateFormState(isLoggedIn) { 
+            document.querySelectorAll('#add-reading-form input, #add-reading-form button, #add-todo-form input, #add-todo-form button').forEach(el => el.disabled = !isLoggedIn); 
+            // UPDATED: Reading placeholder
+            document.getElementById('new-reading-text').placeholder = isLoggedIn ? "Reading" : "Please log in"; 
+            // UPDATED: To-Do placeholder
+            document.getElementById('new-todo-text').placeholder = isLoggedIn ? "To-Do" : "Please log in"; 
+        }
         async function handleAuthSubmit(e) { e.preventDefault(); const email = document.getElementById('auth-email').value, password = document.getElementById('auth-password').value; const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) document.getElementById('auth-message').textContent = error.message; else closeAuthModal(); }
         async function handleLogout() { await supabase.auth.signOut(); }
         document.getElementById('auth-toggle-btn').addEventListener('click', async () => {
