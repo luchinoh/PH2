@@ -73,20 +73,38 @@
         }
 
         .bauhaus-item:hover .item-actions,
-        .bauhaus-item .item-actions:focus-within { /* Also show if using keyboard */
+        .bauhaus-item .item-actions:focus-within {
             opacity: 1;
         }
         .subtask-toggle-btn {
-            opacity: 0.6; /* Makes it 'lighter' by default */
+            opacity: 0.6; 
             transition: opacity 0.15s ease-in-out;
         }
         .bauhaus-item:hover .subtask-toggle-btn {
-            opacity: 1; /* Makes it fully visible on hover */
+            opacity: 1; 
         }
         .bauhaus-item[data-table="reading_list"] .bauhaus-checkbox {
-            border-radius: 50%; /* Makes it a circle */
+            border-radius: 50%;
         }
-        
+        /* New Archive Styles */
+        .archive-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background-color: #eaddc7; /* Lighter background for archive header */
+            border-top: 2px solid #1a1a1a;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .archive-list {
+            padding: 0.5rem 0;
+            background-color: #faf8f5; /* Slightly different background for the list */
+        }
+        .archive-item {
+            border-bottom: 1px solid #e0d8c9;
+            opacity: 0.7; /* Make archived items slightly transparent */
+        }
     </style>
 </head>
 <body class="p-4 sm:p-8">
@@ -105,13 +123,13 @@
                 <div id="daily-focus-column" class="bauhaus-panel flex flex-col">
                     <div class="color-block bg-primary-red" style="color: white;">Daily Focus</div>
                     <div id="daily-focus-list" class="list-container flex-grow p-4 space-y-2"></div>
-                    </div>
+                </div>
 
                 <div id="reading-column" class="bauhaus-panel flex flex-col">
                     <div class="color-block bg-primary-blue" style="color: white;">Reading List</div>
                     <div id="reading-list" class="list-container flex-grow p-4 space-y-2"></div>
                     <form id="add-reading-form" class="flex gap-2 p-4 border-t-3 border-black">
-                        <input type="text" id="new-reading-text" placeholder="Add..." class="flex-grow p-3 border-2 border-black focus:outline-none focus:ring-2 focus:ring-primary-blue">
+                        <input type="text" id="new-reading-text" placeholder="..." class="flex-grow p-3 border-2 border-black focus:outline-none focus:ring-2 focus:ring-primary-blue">
                         <button type="submit" class="font-semibold bg-primary-blue text-white p-3 border-2 border-black transition-colors hover:bg-blue-800">Add</button>
                     </form>
                 </div>
@@ -121,7 +139,7 @@
                 <div class="color-block bg-primary-yellow">Task Inbox</div>
                 <div id="todo-list" class="list-container flex-grow p-4 space-y-2"></div>
                 <form id="add-todo-form" class="flex gap-2 p-4 border-t-3 border-black">
-                    <input type="text" id="new-todo-text" placeholder="Add..." class="flex-grow p-3 border-2 border-black focus:outline-none focus:ring-2 focus:ring-primary-yellow">
+                    <input type="text" id="new-todo-text" placeholder="..." class="flex-grow p-3 border-2 border-black focus:outline-none focus:ring-2 focus:ring-primary-yellow">
                     <button type="submit" class="font-semibold bg-primary-yellow text-black p-3 border-2 border-black transition-colors hover:bg-yellow-300">Add</button>
                 </form>
             </div>
@@ -145,6 +163,8 @@
         let readingList = [];
         let todoList = [];
         let expandedTodoParents = new Set();
+        // New set to track archive expansion status
+        let expandedArchives = new Set(); 
         
         const readingListElement = document.getElementById('reading-list');
         const todoListElement = document.getElementById('todo-list');
@@ -178,6 +198,7 @@
                 readingList = [];
                 todoList = [];
                 expandedTodoParents.clear(); 
+                expandedArchives.clear();
                 renderAllLists();
                 loadingElement.style.display = 'none';
             }
@@ -199,6 +220,8 @@
                 loadingElement.style.display = 'none'; 
                 return; 
             }
+            // Sort by completion time (which Supabase often tracks via 'created_at' or we can simulate by keeping 'order' stable on uncompleted, and sorting completed by the timestamp on the item)
+            // Note: Since Supabase doesn't have an explicit 'completed_at' column in your schema, we rely on the DB's default order stability or implicitly rely on item ID/order for sorting.
             readingList = reading.data || [];
             todoList = todos.data || [];
             renderAllLists();
@@ -224,28 +247,149 @@
             renderDailyFocusList();
         }
 
-        function renderReadingList() {
-            const list = readingList.sort((a,b) => a.completed - b.completed || a.order - b.order);
-            readingListElement.innerHTML = '';
-            if (list.length === 0 && userId) { 
-                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`; 
+        // Helper function to create the collapsible archive section
+        function createArchiveSection(tableName, completedItems) {
+            if (completedItems.length === 0) return null;
+
+            const archiveContainer = document.createElement('div');
+            archiveContainer.id = `${tableName}-archive-container`;
+
+            const isExpanded = expandedArchives.has(tableName);
+
+            // Toggle Header
+            const toggle = document.createElement('div');
+            toggle.className = 'archive-toggle';
+            toggle.onclick = () => toggleArchive(tableName);
+            toggle.innerHTML = `
+                <span>${isExpanded ? 'Hide' : 'Show'} Completed (${completedItems.length})</span>
+                <svg class="h-5 w-5 transition-transform ${isExpanded ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+            `;
+            archiveContainer.appendChild(toggle);
+
+            // List of Archived Items
+            const archiveList = document.createElement('div');
+            archiveList.className = `archive-list ${isExpanded ? '' : 'hidden'}`;
+            completedItems.forEach(item => {
+                const itemEl = createItemElement(item, tableName, false, 0, false, true); // true for isArchived
+                itemEl.classList.add('archive-item');
+                archiveList.appendChild(itemEl);
+            });
+            archiveContainer.appendChild(archiveList);
+            
+            return archiveContainer;
+        }
+
+        function toggleArchive(tableName) {
+            const container = document.getElementById(`${tableName}-archive-container`);
+            const list = container?.querySelector('.archive-list');
+            const span = container?.querySelector('span');
+            const svg = container?.querySelector('svg');
+
+            if (!list || !span || !svg) return;
+
+            const isNowExpanded = list.classList.toggle('hidden');
+            svg.classList.toggle('rotate-90', !isNowExpanded);
+
+            if (isNowExpanded) {
+                expandedArchives.delete(tableName);
+                span.textContent = span.textContent.replace('Hide', 'Show');
             } else {
-                list.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
+                expandedArchives.add(tableName);
+                span.textContent = span.textContent.replace('Show', 'Hide');
+            }
+        }
+        window.toggleArchive = toggleArchive; // Make accessible globally
+
+        function renderReadingList() {
+            // Sort by completion status, then by completion order (last 5 completed items are on top of other completed items)
+            const list = readingList.sort((a,b) => {
+                // Active items (completed: false) come first based on their 'order'
+                if (!a.completed && !b.completed) return a.order - b.order;
+                // Completed items (completed: true) come last
+                return a.completed - b.completed;
+            });
+            
+            readingListElement.innerHTML = '';
+            
+            const activeItems = list.filter(i => !i.completed);
+            const completedItems = list.filter(i => i.completed);
+            
+            if (activeItems.length === 0 && completedItems.length === 0 && userId) { 
+                readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`;
+                return;
+            }
+
+            // Render Active Items
+            activeItems.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
+
+            // Sort completed items by recency (assuming higher ID/Order means more recent)
+            completedItems.sort((a, b) => b.order - a.order);
+
+            // Separate the visible 5 from the archived rest
+            const visibleCompleted = completedItems.slice(0, 5);
+            const archivedCompleted = completedItems.slice(5);
+
+            // Render Visible Completed Items
+            visibleCompleted.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
+
+            // Append the Collapsable Archive Section
+            const archiveSection = createArchiveSection(SUPABASE_TABLE_READING, archivedCompleted);
+            if (archiveSection) {
+                // We append the archive section to the parent column, not the list-container, so it sits nicely below the input form
+                document.getElementById('reading-column').appendChild(archiveSection);
             }
         }
         
         function renderTodoList() {
-            todoListElement.innerHTML = '';
-            const inboxTodos = todoList.filter(item => !item.parent_id);
-            if (inboxTodos.length === 0 && userId) { todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">You have no tasks!</p>`; }
+            const list = todoList.sort((a,b) => {
+                if (!a.completed && !b.completed) return a.order - b.order;
+                return a.completed - b.completed;
+            });
 
-            const sortedInbox = inboxTodos.sort((a,b) => a.completed - b.completed || a.order - b.order);
-            sortedInbox.forEach(mainTodo => {
+            todoListElement.innerHTML = '';
+            
+            const inboxTodos = list.filter(item => !item.parent_id); // Only top-level items for this render
+            
+            const activeParents = inboxTodos.filter(i => !i.completed);
+            const completedParents = inboxTodos.filter(i => i.completed);
+
+            if (activeParents.length === 0 && completedParents.length === 0 && userId) { 
+                todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">You have no tasks!</p>`; 
+                return;
+            }
+
+            // Render Active Items and their Subtasks
+            activeParents.forEach(mainTodo => {
                 const childCount = todoList.filter(t => t.parent_id === mainTodo.id).length;
                 const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, childCount);
                 const subtaskContainer = createSubtaskContainer(mainTodo);
                 todoListElement.append(mainLi, subtaskContainer);
             });
+
+            // Sort completed parents by recency (assuming higher ID/Order means more recent)
+            completedParents.sort((a, b) => b.order - a.order);
+
+            // Separate the visible 5 from the archived rest
+            const visibleCompleted = completedParents.slice(0, 5);
+            const archivedCompleted = completedParents.slice(5);
+
+            // Render Visible Completed Items and their Subtasks
+            visibleCompleted.forEach(mainTodo => {
+                const childCount = todoList.filter(t => t.parent_id === mainTodo.id).length;
+                const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, childCount);
+                const subtaskContainer = createSubtaskContainer(mainTodo);
+                todoListElement.append(mainLi, subtaskContainer);
+            });
+
+
+            // Append the Collapsable Archive Section (only for items beyond the visible 5)
+            const archiveSection = createArchiveSection(SUPABASE_TABLE_TODOS, archivedCompleted);
+            if (archiveSection) {
+                // We append the archive section to the parent column, below the form
+                document.getElementById('todo-column').appendChild(archiveSection);
+            }
         }
 
         function renderDailyFocusList() {
@@ -284,13 +428,14 @@
             return subtaskContainer;
         }
 
-function createItemElement(item, tableName, isSubtask = false, childCount = 0, isDailyFocusItem = false) {
+function createItemElement(item, tableName, isSubtask = false, childCount = 0, isDailyFocusItem = false, isArchived = false) {
             const li = document.createElement('div');
             li.id = `${tableName}-${item.id}`;
             li.dataset.id = item.id;
             li.dataset.table = tableName;
             li.setAttribute('draggable', !item.completed);
-            li.className = `bauhaus-item ${item.completed ? 'opacity-50' : ''}`;
+            // Apply opacity only to completed items in the main list, not if they're forced into the archive section
+            li.className = `bauhaus-item ${item.completed && !isArchived ? 'opacity-50' : ''}`;
             li.dataset.isSubtask = String(isSubtask);
             if (isSubtask) {
                 const parent = todoList.find(t => t.id == item.parent_id);
@@ -317,20 +462,18 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
             
             li.append(check, textSpan);
 
-            // This is the main, always-visible wrapper for ALL right-side buttons
             const buttonsWrapper = document.createElement('div');
             buttonsWrapper.className = 'ml-auto flex items-center'; 
             
-            // This is the NESTED wrapper for buttons that will be hidden on hover
             const hiddenActions = document.createElement('div');
-            hiddenActions.className = 'item-actions flex items-center'; // This has the class to hide it
+            hiddenActions.className = 'item-actions flex items-center'; 
 
             if(isDailyFocusItem && !isSubtask){
                 const removeButton = document.createElement('button');
                 removeButton.className = 'p-1';
                 removeButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
                 removeButton.onclick = () => removeFromDailyFocus(tableName, item.id);
-                hiddenActions.append(removeButton); // Add to hidden wrapper
+                hiddenActions.append(removeButton); 
             }
 
             if (!isSubtask && tableName === SUPABASE_TABLE_TODOS && !item.completed) {
@@ -338,14 +481,11 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
                 addSubtaskButton.className = 'p-1';
                 addSubtaskButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4" /></svg>`;
                 addSubtaskButton.onclick = (e) => { e.stopPropagation(); showAddSubtaskInput(item.id); };
-                hiddenActions.append(addSubtaskButton); // Add to hidden wrapper
+                hiddenActions.append(addSubtaskButton); 
             }
 
-            // --- THIS IS THE CORRECTED LOGIC ---
             if (!isSubtask && childCount > 0) {
-                // 1. If it's a parent, create the toggle button
                 const toggleButton = document.createElement('button');
-                // This class is targeted by your CSS to make it 'lighter'
                 toggleButton.className = 'p-1 rounded-full hover:bg-gray-100 transition-colors subtask-toggle-btn';
                 const isExpanded = expandedTodoParents.has(item.id.toString());
                 toggleButton.innerHTML = `<svg class="h-5 w-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>`;
@@ -353,7 +493,13 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
                 toggleButton.onclick = function() {
                     const parentElement = this.closest('[data-id]');
                     const parentId = parentElement.dataset.id;
-                    const subtaskContainer = parentElement.nextElementSibling;
+                    // Handles both immediate subtask container and next element if it's the archive container
+                    let nextEl = parentElement.nextElementSibling;
+                    while(nextEl && nextEl.classList.contains('archive-item')) { // Skip items if necessary (though they shouldn't be here)
+                        nextEl = nextEl.nextElementSibling;
+                    }
+                    const subtaskContainer = nextEl;
+
                     if (subtaskContainer?.classList.contains('subtask-container')) {
                         const isNowHidden = subtaskContainer.classList.toggle('hidden');
                         this.querySelector('svg').classList.toggle('rotate-90');
@@ -365,26 +511,19 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
                     }
                 };
 
-                // Add the hidden actions FIRST
                 buttonsWrapper.append(hiddenActions);
-                // Add the visible toggle button SECOND (so it's on the far right)
                 buttonsWrapper.appendChild(toggleButton);
 
             } else {
-                // 2. Otherwise (if not a parent), create the delete button
                 const deleteButton = document.createElement('button');
                 deleteButton.className = 'p-1';
                 deleteButton.innerHTML = `<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" /></svg>`;
                 deleteButton.onclick = () => deleteItem(tableName, item.id);
                 
-                // Add the delete button to the HIDDEN wrapper
                 hiddenActions.append(deleteButton);
-                // Add the hidden actions (which now contain delete) to the main wrapper
                 buttonsWrapper.append(hiddenActions);
             }
-            // --- END OF LOGIC ---
             
-            // Finally, append the main wrapper to the list item
             li.append(buttonsWrapper);
 
             return li;
@@ -429,63 +568,70 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
         }
         
         async function addItem(tableName, text, parentId = null) {
-    if (!userId || !text.trim()) return;
-    const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
-    const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
-    const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
-    const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false, daily_order: null };
-    if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
+            if (!userId || !text.trim()) return;
+            
+            // For new items, assign a new high 'order' value so they appear at the top of active items
+            const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
+            const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
+            const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
+            
+            const itemToAdd = { user_id: userId, text: text.trim(), completed: false, order: newOrder, is_daily: false, daily_order: null };
+            if (tableName === SUPABASE_TABLE_TODOS) { itemToAdd.parent_id = parentId; }
 
-    const { data, error } = await supabase.from(tableName).insert(itemToAdd).select().single();
-    if (error) {
-        console.error('Failed to add item', error);
-        showModal('Failed to add item.');
-        return;
-    }
+            const { data, error } = await supabase.from(tableName).insert(itemToAdd).select().single();
+            if (error) {
+                console.error('Failed to add item', error);
+                showModal('Failed to add item.');
+                return;
+            }
 
-    // Immediately refresh local data so the UI updates without a manual refresh.
-    await fetchAndRenderAllLists();
-}
+            await fetchAndRenderAllLists();
+        }
 
 
         async function toggleCompleted(tableName, id, status) {
-    if (!userId) return;
-    const { error } = await supabase.from(tableName).update({ completed: status }).eq('id', id);
-    if (error) {
-        console.error('toggleCompleted error', error);
-        showModal('Could not update item.');
-    } else {
-        await fetchAndRenderAllLists();
-    }
-}
-
-async function deleteItem(tableName, id) {
-    if (!userId) return;
-    try {
-        if (tableName === SUPABASE_TABLE_TODOS) {
-            // delete subtasks first
-            const { error: errChild } = await supabase.from(tableName).delete().eq('parent_id', id);
-            if (errChild) throw errChild;
+            if (!userId) return;
+            // When completing, we can update the 'order' to be a very small number or null, 
+            // but since we want items to move to the bottom based on recency, 
+            // the current sorting logic in render functions is a more reliable approach 
+            // based on the assumption that completed items rely on a different sort key 
+            // (or simply fall below active items). We will just update 'completed'.
+            const { error } = await supabase.from(tableName).update({ completed: status }).eq('id', id);
+            if (error) {
+                console.error('toggleCompleted error', error);
+                showModal('Could not update item.');
+            } else {
+                await fetchAndRenderAllLists();
+            }
         }
-        const { error } = await supabase.from(tableName).delete().eq('id', id);
-        if (error) throw error;
-        await fetchAndRenderAllLists();
-    } catch (err) {
-        console.error('deleteItem error', err);
-        showModal('Could not delete item.');
-    }
-}
 
-async function removeFromDailyFocus(tableName, id){
-    if (!userId) return;
-    const { error } = await supabase.from(tableName).update({ is_daily: false, daily_order: null }).eq('id', id);
-    if (error) {
-        console.error('removeFromDailyFocus error', error);
-        showModal('Could not remove from Daily Focus.');
-    } else {
-        await fetchAndRenderAllLists();
-    }
-}
+        async function deleteItem(tableName, id) {
+            if (!userId) return;
+            try {
+                if (tableName === SUPABASE_TABLE_TODOS) {
+                    // delete subtasks first
+                    const { error: errChild } = await supabase.from(tableName).delete().eq('parent_id', id);
+                    if (errChild) throw errChild;
+                }
+                const { error } = await supabase.from(tableName).delete().eq('id', id);
+                if (error) throw error;
+                await fetchAndRenderAllLists();
+            } catch (err) {
+                console.error('deleteItem error', err);
+                showModal('Could not delete item.');
+            }
+        }
+
+        async function removeFromDailyFocus(tableName, id){
+            if (!userId) return;
+            const { error } = await supabase.from(tableName).update({ is_daily: false, daily_order: null }).eq('id', id);
+            if (error) {
+                console.error('removeFromDailyFocus error', error);
+                showModal('Could not remove from Daily Focus.');
+            } else {
+                await fetchAndRenderAllLists();
+            }
+        }
 
 
         let draggedItem = null;
@@ -577,8 +723,12 @@ async function handleDrop(e) {
                 );
             }
 
-            // Move DOM node
+            // --- Begin DOM Reordering ---
             const indicator = dropTarget.querySelector('.drag-over-indicator');
+            // If dropping into a list, remove the item from its current parent first if necessary
+            // Note: Since render functions handle the full repaint, we mostly just need to update the database order here.
+            
+            // Move DOM node (important for next block)
             if (indicator) dropTarget.insertBefore(draggedItem, indicator);
             else dropTarget.appendChild(draggedItem);
 
@@ -596,8 +746,12 @@ async function handleDrop(e) {
                 const table = el.dataset.table;
                 if (!id || !table) continue;
 
-                const updateData = isDailyDrop ? { daily_order: i } : { order: i };
-                promises.push(supabase.from(table).update(updateData).eq('id', id));
+                // Only update the order/daily_order of items that belong to the main list (not subtasks or archive items if this logic wasn't precise)
+                // Assuming drag/drop is only possible for non-completed top-level items or daily items.
+                if (el.dataset.isSubtask !== 'true') {
+                    const updateData = isDailyDrop ? { daily_order: i } : { order: i };
+                    promises.push(supabase.from(table).update(updateData).eq('id', id));
+                }
             }
 
             await Promise.all(promises);
@@ -608,6 +762,7 @@ async function handleDrop(e) {
     } finally {
         handleDragEnd();
         document.body.style.pointerEvents = 'auto';
+        // A full re-render is essential here to correctly move completed items to/from the archive.
         await fetchAndRenderAllLists();
         console.debug('handleDrop finished');
     }
@@ -617,9 +772,7 @@ async function handleDrop(e) {
         function updateAuthButton(isLoggedOut, email) { const btn = document.getElementById('auth-toggle-btn'); btn.textContent = isLoggedOut ? 'Login' : `Logged in`; }
         function updateFormState(isLoggedIn) { 
             document.querySelectorAll('#add-reading-form input, #add-reading-form button, #add-todo-form input, #add-todo-form button').forEach(el => el.disabled = !isLoggedIn); 
-            // UPDATED: Reading placeholder to '...'
             document.getElementById('new-reading-text').placeholder = isLoggedIn ? "..." : "Please log in"; 
-            // UPDATED: To-Do placeholder to '...'
             document.getElementById('new-todo-text').placeholder = isLoggedIn ? "..." : "Please log in"; 
         }
         async function handleAuthSubmit(e) { e.preventDefault(); const email = document.getElementById('auth-email').value, password = document.getElementById('auth-password').value; const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) document.getElementById('auth-message').textContent = error.message; else closeAuthModal(); }
