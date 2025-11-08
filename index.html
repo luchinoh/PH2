@@ -163,7 +163,6 @@
         let readingList = [];
         let todoList = [];
         let expandedTodoParents = new Set();
-        // New set to track archive expansion status
         let expandedArchives = new Set(); 
         
         const readingListElement = document.getElementById('reading-list');
@@ -220,8 +219,6 @@
                 loadingElement.style.display = 'none'; 
                 return; 
             }
-            // Sort by completion time (which Supabase often tracks via 'created_at' or we can simulate by keeping 'order' stable on uncompleted, and sorting completed by the timestamp on the item)
-            // Note: Since Supabase doesn't have an explicit 'completed_at' column in your schema, we rely on the DB's default order stability or implicitly rely on item ID/order for sorting.
             readingList = reading.data || [];
             todoList = todos.data || [];
             renderAllLists();
@@ -300,14 +297,16 @@
                 span.textContent = span.textContent.replace('Show', 'Hide');
             }
         }
-        window.toggleArchive = toggleArchive; // Make accessible globally
+        window.toggleArchive = toggleArchive; 
 
         function renderReadingList() {
-            // Sort by completion status, then by completion order (last 5 completed items are on top of other completed items)
+            // FIX: Remove old archive container before rendering the new list
+            const oldArchive = document.getElementById(`${SUPABASE_TABLE_READING}-archive-container`);
+            if (oldArchive) oldArchive.remove();
+
+            // Sort by completion status, then by creation order (using 'order')
             const list = readingList.sort((a,b) => {
-                // Active items (completed: false) come first based on their 'order'
                 if (!a.completed && !b.completed) return a.order - b.order;
-                // Completed items (completed: true) come last
                 return a.completed - b.completed;
             });
             
@@ -337,12 +336,15 @@
             // Append the Collapsable Archive Section
             const archiveSection = createArchiveSection(SUPABASE_TABLE_READING, archivedCompleted);
             if (archiveSection) {
-                // We append the archive section to the parent column, not the list-container, so it sits nicely below the input form
                 document.getElementById('reading-column').appendChild(archiveSection);
             }
         }
         
         function renderTodoList() {
+            // FIX: Remove old archive container before rendering the new list
+            const oldArchive = document.getElementById(`${SUPABASE_TABLE_TODOS}-archive-container`);
+            if (oldArchive) oldArchive.remove();
+
             const list = todoList.sort((a,b) => {
                 if (!a.completed && !b.completed) return a.order - b.order;
                 return a.completed - b.completed;
@@ -350,7 +352,7 @@
 
             todoListElement.innerHTML = '';
             
-            const inboxTodos = list.filter(item => !item.parent_id); // Only top-level items for this render
+            const inboxTodos = list.filter(item => !item.parent_id);
             
             const activeParents = inboxTodos.filter(i => !i.completed);
             const completedParents = inboxTodos.filter(i => i.completed);
@@ -387,7 +389,6 @@
             // Append the Collapsable Archive Section (only for items beyond the visible 5)
             const archiveSection = createArchiveSection(SUPABASE_TABLE_TODOS, archivedCompleted);
             if (archiveSection) {
-                // We append the archive section to the parent column, below the form
                 document.getElementById('todo-column').appendChild(archiveSection);
             }
         }
@@ -434,7 +435,6 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
             li.dataset.id = item.id;
             li.dataset.table = tableName;
             li.setAttribute('draggable', !item.completed);
-            // Apply opacity only to completed items in the main list, not if they're forced into the archive section
             li.className = `bauhaus-item ${item.completed && !isArchived ? 'opacity-50' : ''}`;
             li.dataset.isSubtask = String(isSubtask);
             if (isSubtask) {
@@ -570,7 +570,6 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
         async function addItem(tableName, text, parentId = null) {
             if (!userId || !text.trim()) return;
             
-            // For new items, assign a new high 'order' value so they appear at the top of active items
             const list = tableName === SUPABASE_TABLE_TODOS ? todoList : readingList;
             const itemsToOrder = list.filter(i => (parentId ? i.parent_id === parentId : !i.parent_id));
             const newOrder = itemsToOrder.length > 0 ? Math.max(...itemsToOrder.map(i => i.order || 0)) + 1 : 1;
@@ -591,11 +590,6 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
 
         async function toggleCompleted(tableName, id, status) {
             if (!userId) return;
-            // When completing, we can update the 'order' to be a very small number or null, 
-            // but since we want items to move to the bottom based on recency, 
-            // the current sorting logic in render functions is a more reliable approach 
-            // based on the assumption that completed items rely on a different sort key 
-            // (or simply fall below active items). We will just update 'completed'.
             const { error } = await supabase.from(tableName).update({ completed: status }).eq('id', id);
             if (error) {
                 console.error('toggleCompleted error', error);
@@ -725,8 +719,6 @@ async function handleDrop(e) {
 
             // --- Begin DOM Reordering ---
             const indicator = dropTarget.querySelector('.drag-over-indicator');
-            // If dropping into a list, remove the item from its current parent first if necessary
-            // Note: Since render functions handle the full repaint, we mostly just need to update the database order here.
             
             // Move DOM node (important for next block)
             if (indicator) dropTarget.insertBefore(draggedItem, indicator);
@@ -746,8 +738,6 @@ async function handleDrop(e) {
                 const table = el.dataset.table;
                 if (!id || !table) continue;
 
-                // Only update the order/daily_order of items that belong to the main list (not subtasks or archive items if this logic wasn't precise)
-                // Assuming drag/drop is only possible for non-completed top-level items or daily items.
                 if (el.dataset.isSubtask !== 'true') {
                     const updateData = isDailyDrop ? { daily_order: i } : { order: i };
                     promises.push(supabase.from(table).update(updateData).eq('id', id));
@@ -762,7 +752,6 @@ async function handleDrop(e) {
     } finally {
         handleDragEnd();
         document.body.style.pointerEvents = 'auto';
-        // A full re-render is essential here to correctly move completed items to/from the archive.
         await fetchAndRenderAllLists();
         console.debug('handleDrop finished');
     }
