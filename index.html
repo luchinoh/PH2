@@ -157,6 +157,8 @@
         
         const SUPABASE_TABLE_READING = 'reading_list';
         const SUPABASE_TABLE_TODOS = 'todos';
+        // Time constant: 10 hours in milliseconds
+        const VISIBLE_COMPLETED_THRESHOLD = 10 * 60 * 60 * 1000; 
 
         let supabase = null;
         let userId = null;
@@ -244,6 +246,17 @@
             renderDailyFocusList();
         }
 
+        /**
+         * Checks if an item was completed within the last X hours (VISIBLE_COMPLETED_THRESHOLD)
+         * Assumes the database table has a 'completed_at' column (timestamp with time zone).
+         */
+        function isRecentlyCompleted(item) {
+            if (!item.completed || !item.completed_at) return false;
+            const completedTime = new Date(item.completed_at).getTime();
+            const currentTime = Date.now();
+            return (currentTime - completedTime) < VISIBLE_COMPLETED_THRESHOLD;
+        }
+
         // Helper function to create the collapsible archive section
         function createArchiveSection(tableName, completedItems) {
             if (completedItems.length === 0) return null;
@@ -268,6 +281,9 @@
             // List of Archived Items
             const archiveList = document.createElement('div');
             archiveList.className = `archive-list ${isExpanded ? '' : 'hidden'}`;
+            // Sort archived items from newest to oldest for display inside the archive
+            completedItems.sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
+
             completedItems.forEach(item => {
                 const itemEl = createItemElement(item, tableName, false, 0, false, true); // true for isArchived
                 itemEl.classList.add('archive-item');
@@ -286,10 +302,11 @@
 
             if (!list || !span || !svg) return;
 
-            const isNowExpanded = list.classList.toggle('hidden');
-            svg.classList.toggle('rotate-90', !isNowExpanded);
+            const isNowHidden = list.classList.toggle('hidden');
+            svg.classList.toggle('rotate-90', !isNowHidden);
 
-            if (isNowExpanded) {
+            // Update expandedArchives set and text
+            if (isNowHidden) {
                 expandedArchives.delete(tableName);
                 span.textContent = span.textContent.replace('Hide', 'Show');
             } else {
@@ -304,34 +321,24 @@
             const oldArchive = document.getElementById(`${SUPABASE_TABLE_READING}-archive-container`);
             if (oldArchive) oldArchive.remove();
 
-            // Sort by completion status, then by creation order (using 'order')
-            const list = readingList.sort((a,b) => {
-                if (!a.completed && !b.completed) return a.order - b.order;
-                return a.completed - b.completed;
-            });
-            
             readingListElement.innerHTML = '';
             
-            const activeItems = list.filter(i => !i.completed);
-            const completedItems = list.filter(i => i.completed);
-            
-            if (activeItems.length === 0 && completedItems.length === 0 && userId) { 
+            // Filter and separate based on completion time
+            const activeItems = readingList.filter(i => !i.completed);
+            const recentlyCompleted = readingList.filter(i => i.completed && isRecentlyCompleted(i));
+            const archivedCompleted = readingList.filter(i => i.completed && !isRecentlyCompleted(i));
+
+            if (activeItems.length === 0 && recentlyCompleted.length === 0 && archivedCompleted.length === 0 && userId) { 
                 readingListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Your reading list is empty.</p>`;
                 return;
             }
 
-            // Render Active Items
-            activeItems.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
+            // Render Active Items (sorted by order)
+            activeItems.sort((a, b) => a.order - b.order).forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
 
-            // Sort completed items by recency (assuming higher ID/Order means more recent)
-            completedItems.sort((a, b) => b.order - a.order);
-
-            // Separate the visible 5 from the archived rest
-            const visibleCompleted = completedItems.slice(0, 5);
-            const archivedCompleted = completedItems.slice(5);
-
-            // Render Visible Completed Items
-            visibleCompleted.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
+            // Render Recently Completed Items (sorted by completed_at, newest first)
+            recentlyCompleted.sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
+            recentlyCompleted.forEach(item => readingListElement.appendChild(createItemElement(item, SUPABASE_TABLE_READING)));
 
             // Append the Collapsable Archive Section
             const archiveSection = createArchiveSection(SUPABASE_TABLE_READING, archivedCompleted);
@@ -345,49 +352,39 @@
             const oldArchive = document.getElementById(`${SUPABASE_TABLE_TODOS}-archive-container`);
             if (oldArchive) oldArchive.remove();
 
-            const list = todoList.sort((a,b) => {
-                if (!a.completed && !b.completed) return a.order - b.order;
-                return a.completed - b.completed;
-            });
-
             todoListElement.innerHTML = '';
             
-            const inboxTodos = list.filter(item => !item.parent_id);
+            const inboxTodos = todoList.filter(item => !item.parent_id);
             
+            // Filter and separate top-level items based on completion time
             const activeParents = inboxTodos.filter(i => !i.completed);
-            const completedParents = inboxTodos.filter(i => i.completed);
+            const recentlyCompletedParents = inboxTodos.filter(i => i.completed && isRecentlyCompleted(i));
+            const archivedCompletedParents = inboxTodos.filter(i => i.completed && !isRecentlyCompleted(i));
 
-            if (activeParents.length === 0 && completedParents.length === 0 && userId) { 
+            if (activeParents.length === 0 && recentlyCompletedParents.length === 0 && archivedCompletedParents.length === 0 && userId) { 
                 todoListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">You have no tasks!</p>`; 
                 return;
             }
 
-            // Render Active Items and their Subtasks
-            activeParents.forEach(mainTodo => {
+            // Render Active Items and their Subtasks (sorted by order)
+            activeParents.sort((a, b) => a.order - b.order).forEach(mainTodo => {
                 const childCount = todoList.filter(t => t.parent_id === mainTodo.id).length;
                 const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, childCount);
                 const subtaskContainer = createSubtaskContainer(mainTodo);
                 todoListElement.append(mainLi, subtaskContainer);
             });
 
-            // Sort completed parents by recency (assuming higher ID/Order means more recent)
-            completedParents.sort((a, b) => b.order - a.order);
-
-            // Separate the visible 5 from the archived rest
-            const visibleCompleted = completedParents.slice(0, 5);
-            const archivedCompleted = completedParents.slice(5);
-
-            // Render Visible Completed Items and their Subtasks
-            visibleCompleted.forEach(mainTodo => {
+            // Render Recently Completed Items and their Subtasks (sorted by completed_at, newest first)
+            recentlyCompletedParents.sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
+            recentlyCompletedParents.forEach(mainTodo => {
                 const childCount = todoList.filter(t => t.parent_id === mainTodo.id).length;
                 const mainLi = createItemElement(mainTodo, SUPABASE_TABLE_TODOS, false, childCount);
                 const subtaskContainer = createSubtaskContainer(mainTodo);
                 todoListElement.append(mainLi, subtaskContainer);
             });
 
-
-            // Append the Collapsable Archive Section (only for items beyond the visible 5)
-            const archiveSection = createArchiveSection(SUPABASE_TABLE_TODOS, archivedCompleted);
+            // Append the Collapsable Archive Section
+            const archiveSection = createArchiveSection(SUPABASE_TABLE_TODOS, archivedCompletedParents);
             if (archiveSection) {
                 document.getElementById('todo-column').appendChild(archiveSection);
             }
@@ -397,7 +394,6 @@
             dailyFocusListElement.innerHTML = '';
             const dailyReading = readingList.filter(item => item.is_daily);
             const dailyTodos = todoList.filter(item => item.is_daily && !item.parent_id);
-            // Sort the Daily Focus list by its own 'daily_order' column.
             const dailyItems = [...dailyReading, ...dailyTodos].sort((a,b) => (a.daily_order ?? Infinity) - (b.daily_order ?? Infinity));
 
             if (dailyItems.length === 0 && userId) { dailyFocusListElement.innerHTML = `<p class="text-center py-8 text-gray-500 font-semibold">Drag items here for today.</p>`; }
@@ -435,6 +431,7 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
             li.dataset.id = item.id;
             li.dataset.table = tableName;
             li.setAttribute('draggable', !item.completed);
+            // Completed items should only get the opacity if they are visible in the main list
             li.className = `bauhaus-item ${item.completed && !isArchived ? 'opacity-50' : ''}`;
             li.dataset.isSubtask = String(isSubtask);
             if (isSubtask) {
@@ -493,9 +490,8 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
                 toggleButton.onclick = function() {
                     const parentElement = this.closest('[data-id]');
                     const parentId = parentElement.dataset.id;
-                    // Handles both immediate subtask container and next element if it's the archive container
                     let nextEl = parentElement.nextElementSibling;
-                    while(nextEl && nextEl.classList.contains('archive-item')) { // Skip items if necessary (though they shouldn't be here)
+                    while(nextEl && nextEl.classList.contains('archive-item')) { 
                         nextEl = nextEl.nextElementSibling;
                     }
                     const subtaskContainer = nextEl;
@@ -590,7 +586,14 @@ function createItemElement(item, tableName, isSubtask = false, childCount = 0, i
 
         async function toggleCompleted(tableName, id, status) {
             if (!userId) return;
-            const { error } = await supabase.from(tableName).update({ completed: status }).eq('id', id);
+            
+            // Set 'completed_at' to current time if status is true, otherwise set to null.
+            const updateData = { 
+                completed: status,
+                completed_at: status ? new Date().toISOString() : null
+            };
+
+            const { error } = await supabase.from(tableName).update(updateData).eq('id', id);
             if (error) {
                 console.error('toggleCompleted error', error);
                 showModal('Could not update item.');
